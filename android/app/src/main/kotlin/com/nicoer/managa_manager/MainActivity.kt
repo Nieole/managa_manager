@@ -1,0 +1,5 @@
+package com.nicoer.managa_manager
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
