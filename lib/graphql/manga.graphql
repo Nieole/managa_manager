@@ -1,0 +1,31 @@
+query ComicById($comicId:ID!) {
+    comicById(comicId: $comicId) {
+        id
+        title
+        status
+        year
+        imageUrl
+        adult
+        dateCreated
+        dateUpdated
+        views
+        monthViews
+        favoriteCount
+        lastBookUpdate
+        lastChapterUpdate
+        description
+        reasons
+        sexyLevel
+        sexyLevelReason
+        sexualContent
+        ntr
+        warnings
+        otherTitles
+        authors {
+            name
+        }
+        categories {
+            name
+        }
+    }
+}

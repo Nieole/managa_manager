@@ -1,0 +1,19 @@
+targets:
+  $default:
+    builders:
+      graphql_codegen:
+        options:
+          # assets:
+          #   # 推荐的做法是让代码生成器自动查找所有 .graphql 文件
+          #   # 如果需要指定，可以取消下面的注释
+          #   - "lib/**.graphql"
+          clients:
+            - graphql
+            # 如果使用 graphql_flutter，也要加上这个
+            - graphql_flutter
+          scalars:
+          # 如果你的 schema 中有自定义的标量类型 (scalars),
+          # 需要在这里映射到 Dart 类型
+          # 例如，如果有一个 DateTime 类型:
+          # DateTime:
+          #   type: DateTime
