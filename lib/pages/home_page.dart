@@ -459,6 +459,43 @@ class _HomePageState extends State<HomePage> {
                                                 style: TextStyle(color: Colors.grey[600]),
                                               ),
                                             const SizedBox(height: 4),
+                                            // 作者
+                                            if (m.author.isNotEmpty)
+                                              Row(
+                                                children: [
+                                                  Icon(Icons.person, size: 14, color: Colors.grey[500]),
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      m.author,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            // 连载状态 + 更新时间
+                                            Row(
+                                              children: [
+                                                Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  m.status,
+                                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Icon(Icons.update, size: 14, color: Colors.grey[500]),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  m.updatedAt != null
+                                                      ? '${m.updatedAt!.toLocal().year.toString().padLeft(4, '0')}-${m.updatedAt!.toLocal().month.toString().padLeft(2, '0')}-${m.updatedAt!.toLocal().day.toString().padLeft(2, '0')} ${m.updatedAt!.toLocal().hour.toString().padLeft(2, '0')}:${m.updatedAt!.toLocal().minute.toString().padLeft(2, '0')}'
+                                                      : '—',
+                                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
                                             Row(
                                               children: [
                                                 if (m.year > 0) ...[
