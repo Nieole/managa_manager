@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:isar/isar.dart';
 import 'package:managa_manager/models/chapter.dart';
 
@@ -22,18 +23,25 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   late Future<Isar> _isarFuture;
   final SettingsRepository _settingsRepo = SettingsRepository();
-  final MangaRepository _mangaRepo = MangaRepository();
+  late MangaRepository _mangaRepo;
   final DownloadService _downloadService = DownloadService();
 
   int _page = 0;
   static const int _pageSize = 20;
   bool _selectionMode = false;
   final Set<Id> _selectedIds = {};
+  bool _isAnalyzing = false;
 
   @override
   void initState() {
     super.initState();
     _isarFuture = IsarService.getInstance();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _mangaRepo = MangaRepository(context: context);
   }
 
   Future<List<Manga>> _queryPage(Isar isar) async {
@@ -60,16 +68,35 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _onAnalyze() async {
-    EasyLoading.show(status: '分析并同步中...');
+    if (_isAnalyzing) return;
+    
+    setState(() {
+      _isAnalyzing = true;
+    });
+    
     try {
-      await _mangaRepo.syncAllManga();
-      EasyLoading.showSuccess('同步完成');
+      await _mangaRepo.syncAllManga(
+        onMangaAdded: (manga) {
+          // 实时刷新UI，不阻塞页面
+          if (mounted) {
+            setState(() {});
+          }
+        },
+      );
+      if (mounted) {
+        EasyLoading.showSuccess('同步完成');
+      }
     } catch (e) {
-      EasyLoading.showError('同步失败: $e');
+      if (mounted) {
+        EasyLoading.showError('同步失败: $e');
+      }
     } finally {
-      EasyLoading.dismiss();
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+        });
+      }
     }
-    if (mounted) setState(() {});
   }
 
   void _toggleSelection() {
@@ -131,9 +158,15 @@ class _HomePageState extends State<HomePage> {
             tooltip: '设置保存路径',
           ),
           IconButton(
-            onPressed: _onAnalyze,
-            icon: const Icon(Icons.analytics),
-            tooltip: '分析并同步',
+            onPressed: _isAnalyzing ? null : _onAnalyze,
+            icon: _isAnalyzing 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.analytics),
+            tooltip: _isAnalyzing ? '同步中...' : '分析并同步',
           ),
           IconButton(
             onPressed: _toggleSelection,

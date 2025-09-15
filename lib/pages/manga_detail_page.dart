@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:isar/isar.dart';
 
 import '../models/chapter.dart';
@@ -16,12 +17,18 @@ class MangaDetailPage extends StatefulWidget {
 
 class _MangaDetailPageState extends State<MangaDetailPage> {
   late Future<Isar> _isarFuture;
-  final MangaRepository _repo = MangaRepository();
+  late MangaRepository _repo;
 
   @override
   void initState() {
     super.initState();
     _isarFuture = IsarService.getInstance();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _repo = MangaRepository(context: context);
   }
 
   Future<(Manga?, List<Chapter>)> _load(Isar isar) async {
