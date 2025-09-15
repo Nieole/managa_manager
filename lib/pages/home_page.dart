@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:isar/isar.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:managa_manager/models/chapter.dart';
 
 import '../models/manga.dart';
@@ -31,6 +31,7 @@ class _HomePageState extends State<HomePage> {
   bool _selectionMode = false;
   final Set<Id> _selectedIds = {};
   bool _isAnalyzing = false;
+  bool _showFavoritesOnly = false; // 是否只显示收藏
 
   @override
   void initState() {
@@ -46,29 +47,76 @@ class _HomePageState extends State<HomePage> {
 
   Future<List<Manga>> _queryPage(Isar isar) async {
     final filterText = _searchController.text.trim();
-    final qb = isar.mangas.where().sortByMangaId();
-    if (filterText.isEmpty) {
-      return qb.offset(_page * _pageSize).limit(_pageSize).findAll();
+    
+    // 构建查询条件
+    if (_showFavoritesOnly && filterText.isNotEmpty) {
+      // 收藏 + 搜索
+      return await isar.mangas
+          .filter()
+          .isFavoriteEqualTo(true)
+          .and()
+          .titleContains(filterText, caseSensitive: false)
+          .sortByMangaId()
+          .offset(_page * _pageSize)
+          .limit(_pageSize)
+          .findAll();
+    } else if (_showFavoritesOnly) {
+      // 仅收藏
+      return await isar.mangas
+          .filter()
+          .isFavoriteEqualTo(true)
+          .sortByMangaId()
+          .offset(_page * _pageSize)
+          .limit(_pageSize)
+          .findAll();
+    } else if (filterText.isNotEmpty) {
+      // 仅搜索
+      return await isar.mangas
+          .filter()
+          .titleContains(filterText, caseSensitive: false)
+          .sortByMangaId()
+          .offset(_page * _pageSize)
+          .limit(_pageSize)
+          .findAll();
+    } else {
+      // 全部
+      return await isar.mangas
+          .where()
+          .sortByMangaId()
+          .offset(_page * _pageSize)
+          .limit(_pageSize)
+          .findAll();
     }
-    // 简单模糊匹配：先查全部 title 包含，再按 id 排
-    return isar.mangas
-        .filter()
-        .titleContains(filterText, caseSensitive: false)
-        .sortByMangaId()
-        .offset(_page * _pageSize)
-        .limit(_pageSize)
-        .findAll();
   }
 
   Future<int> _getTotalCount(Isar isar) async {
     final filterText = _searchController.text.trim();
-    if (filterText.isEmpty) {
+    
+    // 构建查询条件
+    if (_showFavoritesOnly && filterText.isNotEmpty) {
+      // 收藏 + 搜索
+      return await isar.mangas
+          .filter()
+          .isFavoriteEqualTo(true)
+          .and()
+          .titleContains(filterText, caseSensitive: false)
+          .count();
+    } else if (_showFavoritesOnly) {
+      // 仅收藏
+      return await isar.mangas
+          .filter()
+          .isFavoriteEqualTo(true)
+          .count();
+    } else if (filterText.isNotEmpty) {
+      // 仅搜索
+      return await isar.mangas
+          .filter()
+          .titleContains(filterText, caseSensitive: false)
+          .count();
+    } else {
+      // 全部
       return await isar.mangas.count();
     }
-    return await isar.mangas
-        .filter()
-        .titleContains(filterText, caseSensitive: false)
-        .count();
   }
 
   Future<void> _onPickPath() async {
@@ -115,6 +163,41 @@ class _HomePageState extends State<HomePage> {
       _selectionMode = !_selectionMode;
       if (!_selectionMode) _selectedIds.clear();
     });
+  }
+
+  void _toggleFavoritesFilter() {
+    setState(() {
+      _showFavoritesOnly = !_showFavoritesOnly;
+      _page = 0; // 重置到第一页
+    });
+  }
+
+  Future<void> _refreshManga(Manga manga) async {
+    try {
+      EasyLoading.show(status: '刷新中...');
+      await _mangaRepo.refreshMangaById(manga.mangaId);
+      if (mounted) {
+        setState(() {}); // 刷新UI
+        EasyLoading.showSuccess('刷新成功');
+      }
+    } catch (e) {
+      if (mounted) {
+        EasyLoading.showError('刷新失败: $e');
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite(Manga manga) async {
+    try {
+      await _mangaRepo.toggleFavorite(manga.mangaId);
+      if (mounted) {
+        setState(() {}); // 刷新UI
+      }
+    } catch (e) {
+      if (mounted) {
+        EasyLoading.showError('操作失败: $e');
+      }
+    }
   }
 
   Future<void> _downloadSelected() async {
@@ -180,6 +263,11 @@ class _HomePageState extends State<HomePage> {
             tooltip: _isAnalyzing ? '同步中...' : '分析并同步',
           ),
           IconButton(
+            onPressed: _toggleFavoritesFilter,
+            icon: Icon(_showFavoritesOnly ? Icons.favorite : Icons.favorite_border),
+            tooltip: _showFavoritesOnly ? '显示全部' : '只显示收藏',
+          ),
+          IconButton(
             onPressed: _toggleSelection,
             icon: Icon(_selectionMode ? Icons.check_box : Icons.check_box_outlined),
             tooltip: '批量选择',
@@ -235,7 +323,7 @@ class _HomePageState extends State<HomePage> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surfaceVariant,
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -246,35 +334,116 @@ class _HomePageState extends State<HomePage> {
                               ),
                               const SizedBox(height: 8),
                               Expanded(
-                                child: ListView.separated(
+                                child: ListView.builder(
                                   itemCount: items.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 1),
                                   itemBuilder: (context, index) {
                                     final m = items[index];
                                     final selected = _selectedIds.contains(m.id);
-                                    return ListTile(
-                                      leading: _selectionMode
-                                          ? Checkbox(
-                                              value: selected,
-                                              onChanged: (v) {
-                                                setState(() {
-                                                  if (v == true) {
-                                                    _selectedIds.add(m.id);
-                                                  } else {
-                                                    _selectedIds.remove(m.id);
-                                                  }
-                                                });
-                                              },
-                                            )
-                                          : null,
-                                      title: Text(m.title.isEmpty ? m.mangaId : m.title),
-                                      subtitle: Text(m.description, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                      trailing: const Icon(Icons.chevron_right),
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (_) => MangaDetailPage(mangaId: m.id)),
-                                        );
-                                      },
+                                    return Card(
+                                      margin: const EdgeInsets.symmetric(vertical: 4),
+                                      child: ListTile(
+                                        leading: _selectionMode
+                                            ? Checkbox(
+                                                value: selected,
+                                                onChanged: (v) {
+                                                  setState(() {
+                                                    if (v == true) {
+                                                      _selectedIds.add(m.id);
+                                                    } else {
+                                                      _selectedIds.remove(m.id);
+                                                    }
+                                                  });
+                                                },
+                                              )
+                                            : ClipRRect(
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: m.imageUrl.isNotEmpty
+                                                    ? CachedNetworkImage(
+                                                        imageUrl: m.imageUrl,
+                                                        width: 60,
+                                                        height: 80,
+                                                        fit: BoxFit.cover,
+                                                        placeholder: (context, url) => Container(
+                                                          width: 60,
+                                                          height: 80,
+                                                          color: Colors.grey[300],
+                                                          child: const Icon(Icons.image, color: Colors.grey),
+                                                        ),
+                                                        errorWidget: (context, url, error) => Container(
+                                                          width: 60,
+                                                          height: 80,
+                                                          color: Colors.grey[300],
+                                                          child: const Icon(Icons.broken_image, color: Colors.grey),
+                                                        ),
+                                                      )
+                                                    : Container(
+                                                        width: 60,
+                                                        height: 80,
+                                                        color: Colors.grey[300],
+                                                        child: const Icon(Icons.image, color: Colors.grey),
+                                                      ),
+                                              ),
+                                        title: Text(
+                                          m.title.isEmpty ? m.mangaId : m.title,
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        subtitle: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (m.description != null && m.description!.isNotEmpty)
+                                              Text(
+                                                m.description!,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(color: Colors.grey[600]),
+                                              ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                if (m.year > 0) ...[
+                                                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                                                  const SizedBox(width: 4),
+                                                  Text('${m.year}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                                  const SizedBox(width: 12),
+                                                ],
+                                                if (m.views != null && m.views! > 0) ...[
+                                                  Icon(Icons.visibility, size: 14, color: Colors.grey[500]),
+                                                  const SizedBox(width: 4),
+                                                  Text('${m.views}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                                ],
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        trailing: _selectionMode
+                                            ? null
+                                            : Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      m.isFavorite ? Icons.favorite : Icons.favorite_border,
+                                                      color: m.isFavorite ? Colors.red : Colors.grey,
+                                                    ),
+                                                    onPressed: () => _toggleFavorite(m),
+                                                    tooltip: m.isFavorite ? '取消收藏' : '添加收藏',
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.refresh),
+                                                    onPressed: () => _refreshManga(m),
+                                                    tooltip: '刷新数据',
+                                                  ),
+                                                  const Icon(Icons.chevron_right),
+                                                ],
+                                              ),
+                                        onTap: () {
+                                          if (!_selectionMode) {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(builder: (_) => MangaDetailPage(mangaId: m.id)),
+                                            );
+                                          }
+                                        },
+                                      ),
                                     );
                                   },
                                 ),

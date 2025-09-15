@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:isar/isar.dart';
@@ -78,19 +76,37 @@ class MangaRepository {
     if (data == null) return null;
     final comic = data.comicById;
     if (comic == null) return null;
-
+    
     final m = _mapComicToManga(comic)..mangaId = comic.id;
-
+    
     await isar.writeTxn(() async {
       final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
       if (exist != null) {
         m.id = exist.id;
         m.localPath = exist.localPath;
         m.isDownloaded = exist.isDownloaded;
+        m.isFavorite = exist.isFavorite; // 保持收藏状态
       }
       await isar.mangas.put(m);
     });
     return m;
+  }
+
+  // 刷新单条漫画数据
+  Future<Manga?> refreshMangaById(String mangaId) async {
+    return await fetchAndUpsertComicById(mangaId);
+  }
+
+  // 切换收藏状态
+  Future<void> toggleFavorite(String mangaId) async {
+    final isar = await IsarService.getInstance();
+    await isar.writeTxn(() async {
+      final manga = await isar.mangas.filter().mangaIdEqualTo(mangaId).findFirst();
+      if (manga != null) {
+        manga.isFavorite = !manga.isFavorite;
+        await isar.mangas.put(manga);
+      }
+    });
   }
 
   Future<void> syncChaptersFor(String mangaId) async {
@@ -163,18 +179,22 @@ class MangaRepository {
     
     final data = result.parsedData;
     if (data == null) return null;
-    final url = data.getDownloadChapterUrl?.url;
+    final downloadUrl = data.getDownloadChapterUrl;
+    if (downloadUrl == null) return null;
+    final url = downloadUrl.url;
     return (url != null && url.isNotEmpty) ? url : null;
   }
 
   Manga _mapComicToManga(Query$ComicById$comicById comic) {
-    final tags = <String>[];
+    // 处理分类列表
+    final categories = <String>[];
     for (final c in comic.categories) {
       if (c?.name != null && c!.name.isNotEmpty) {
-        tags.add(c.name);
+        categories.add(c.name);
       }
     }
 
+    // 处理作者列表
     String authorJoined = '';
     if (comic.authors.isNotEmpty) {
       authorJoined = comic.authors
@@ -183,16 +203,54 @@ class MangaRepository {
           .join(', ');
     }
 
+    // 处理原因列表
+    final reasons = <String>[];
+    for (final r in comic.reasons) {
+      if (r != null && r.isNotEmpty) {
+        reasons.add(r);
+      }
+    }
+
+    // 处理警告列表
+    final warnings = <String>[];
+    for (final w in comic.warnings) {
+      if (w != null && w.isNotEmpty) {
+        warnings.add(w);
+      }
+    }
+
+    // 处理其他标题列表
+    final otherTitles = <String>[];
+    for (final t in comic.otherTitles) {
+      if (t != null && t.isNotEmpty) {
+        otherTitles.add(t);
+      }
+    }
+
     return Manga()
       ..mangaId = comic.id
       ..title = comic.title
-      ..cover = comic.imageUrl
-      ..description = comic.description ?? ''
+      ..status = comic.status
+      ..year = comic.year
+      ..imageUrl = comic.imageUrl
+      ..adult = comic.adult
+      ..dateCreated = comic.dateCreated
+      ..dateUpdated = comic.dateUpdated
+      ..views = comic.views
+      ..monthViews = comic.monthViews
+      ..favoriteCount = comic.favoriteCount
+      ..lastBookUpdate = comic.lastBookUpdate
+      ..lastChapterUpdate = comic.lastChapterUpdate
+      ..description = comic.description
+      ..reasons = reasons
+      ..sexyLevel = comic.sexyLevel
+      ..sexyLevelReason = comic.sexyLevelReason
+      ..sexualContent = comic.sexualContent
+      ..ntr = comic.ntr
+      ..warnings = warnings
+      ..otherTitles = otherTitles
       ..author = authorJoined
-      ..tags = tags
-      ..isCompleted = comic.status.toLowerCase().contains('complete')
-      ..createdAt = comic.dateCreated != null ? DateTime.tryParse(comic.dateCreated!) : null
-      ..updatedAt = comic.dateUpdated != null ? DateTime.tryParse(comic.dateUpdated!) : null;
+      ..categories = categories;
   }
 }
 

@@ -422,6 +422,13 @@ const documentNodeQueryComicById = DocumentNode(definitions: [
             directives: [],
             selectionSet: SelectionSetNode(selections: [
               FieldNode(
+                name: NameNode(value: 'id'),
+                alias: null,
+                arguments: [],
+                directives: [],
+                selectionSet: null,
+              ),
+              FieldNode(
                 name: NameNode(value: 'name'),
                 alias: null,
                 arguments: [],
@@ -443,6 +450,13 @@ const documentNodeQueryComicById = DocumentNode(definitions: [
             arguments: [],
             directives: [],
             selectionSet: SelectionSetNode(selections: [
+              FieldNode(
+                name: NameNode(value: 'id'),
+                alias: null,
+                arguments: [],
+                directives: [],
+                selectionSet: null,
+              ),
               FieldNode(
                 name: NameNode(value: 'name'),
                 alias: null,
@@ -1278,19 +1292,24 @@ class _CopyWithStubImpl$Query$ComicById$comicById<TRes>
 
 class Query$ComicById$comicById$authors {
   Query$ComicById$comicById$authors({
+    required this.id,
     required this.name,
     this.$__typename = 'Author',
   });
 
   factory Query$ComicById$comicById$authors.fromJson(
       Map<String, dynamic> json) {
+    final l$id = json['id'];
     final l$name = json['name'];
     final l$$__typename = json['__typename'];
     return Query$ComicById$comicById$authors(
+      id: (l$id as String),
       name: (l$name as String),
       $__typename: (l$$__typename as String),
     );
   }
+
+  final String id;
 
   final String name;
 
@@ -1298,6 +1317,8 @@ class Query$ComicById$comicById$authors {
 
   Map<String, dynamic> toJson() {
     final _resultData = <String, dynamic>{};
+    final l$id = id;
+    _resultData['id'] = l$id;
     final l$name = name;
     _resultData['name'] = l$name;
     final l$$__typename = $__typename;
@@ -1307,9 +1328,11 @@ class Query$ComicById$comicById$authors {
 
   @override
   int get hashCode {
+    final l$id = id;
     final l$name = name;
     final l$$__typename = $__typename;
     return Object.hashAll([
+      l$id,
       l$name,
       l$$__typename,
     ]);
@@ -1322,6 +1345,11 @@ class Query$ComicById$comicById$authors {
     }
     if (other is! Query$ComicById$comicById$authors ||
         runtimeType != other.runtimeType) {
+      return false;
+    }
+    final l$id = id;
+    final lOther$id = other.id;
+    if (l$id != lOther$id) {
       return false;
     }
     final l$name = name;
@@ -1357,6 +1385,7 @@ abstract class CopyWith$Query$ComicById$comicById$authors<TRes> {
       _CopyWithStubImpl$Query$ComicById$comicById$authors;
 
   TRes call({
+    String? id,
     String? name,
     String? $__typename,
   });
@@ -1376,10 +1405,12 @@ class _CopyWithImpl$Query$ComicById$comicById$authors<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({
+    Object? id = _undefined,
     Object? name = _undefined,
     Object? $__typename = _undefined,
   }) =>
       _then(Query$ComicById$comicById$authors(
+        id: id == _undefined || id == null ? _instance.id : (id as String),
         name: name == _undefined || name == null
             ? _instance.name
             : (name as String),
@@ -1396,6 +1427,7 @@ class _CopyWithStubImpl$Query$ComicById$comicById$authors<TRes>
   TRes _res;
 
   call({
+    String? id,
     String? name,
     String? $__typename,
   }) =>
@@ -1404,19 +1436,24 @@ class _CopyWithStubImpl$Query$ComicById$comicById$authors<TRes>
 
 class Query$ComicById$comicById$categories {
   Query$ComicById$comicById$categories({
+    required this.id,
     required this.name,
     this.$__typename = 'Category',
   });
 
   factory Query$ComicById$comicById$categories.fromJson(
       Map<String, dynamic> json) {
+    final l$id = json['id'];
     final l$name = json['name'];
     final l$$__typename = json['__typename'];
     return Query$ComicById$comicById$categories(
+      id: (l$id as String),
       name: (l$name as String),
       $__typename: (l$$__typename as String),
     );
   }
+
+  final String id;
 
   final String name;
 
@@ -1424,6 +1461,8 @@ class Query$ComicById$comicById$categories {
 
   Map<String, dynamic> toJson() {
     final _resultData = <String, dynamic>{};
+    final l$id = id;
+    _resultData['id'] = l$id;
     final l$name = name;
     _resultData['name'] = l$name;
     final l$$__typename = $__typename;
@@ -1433,9 +1472,11 @@ class Query$ComicById$comicById$categories {
 
   @override
   int get hashCode {
+    final l$id = id;
     final l$name = name;
     final l$$__typename = $__typename;
     return Object.hashAll([
+      l$id,
       l$name,
       l$$__typename,
     ]);
@@ -1448,6 +1489,11 @@ class Query$ComicById$comicById$categories {
     }
     if (other is! Query$ComicById$comicById$categories ||
         runtimeType != other.runtimeType) {
+      return false;
+    }
+    final l$id = id;
+    final lOther$id = other.id;
+    if (l$id != lOther$id) {
       return false;
     }
     final l$name = name;
@@ -1484,6 +1530,7 @@ abstract class CopyWith$Query$ComicById$comicById$categories<TRes> {
       _CopyWithStubImpl$Query$ComicById$comicById$categories;
 
   TRes call({
+    String? id,
     String? name,
     String? $__typename,
   });
@@ -1503,10 +1550,12 @@ class _CopyWithImpl$Query$ComicById$comicById$categories<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({
+    Object? id = _undefined,
     Object? name = _undefined,
     Object? $__typename = _undefined,
   }) =>
       _then(Query$ComicById$comicById$categories(
+        id: id == _undefined || id == null ? _instance.id : (id as String),
         name: name == _undefined || name == null
             ? _instance.name
             : (name as String),
@@ -1523,6 +1572,7 @@ class _CopyWithStubImpl$Query$ComicById$comicById$categories<TRes>
   TRes _res;
 
   call({
+    String? id,
     String? name,
     String? $__typename,
   }) =>
