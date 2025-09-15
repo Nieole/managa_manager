@@ -22,9 +22,11 @@ query ComicById($comicId:ID!) {
         warnings
         otherTitles
         authors {
+            id
             name
         }
         categories {
+            id
             name
         }
     }

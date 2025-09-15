@@ -1,0 +1,29 @@
+query ChaptersByComicId($comicId: ID!) {
+  chaptersByComicId(comicId: $comicId) {
+    id
+    serial
+    type
+    size
+    dateCreated
+    dateUpdated
+  }
+}
+
+query ImagesByChapterId($chapterId: ID!) {
+  imagesByChapterId(chapterId: $chapterId) {
+    id
+    kid
+    orderNumber
+    width
+    height
+    dateCreated
+    dateUpdated
+  }
+}
+
+query GetDownloadChapterUrl($chapterId: ID!) {
+  getDownloadChapterUrl(chapterId: $chapterId) {
+    url
+    status
+  }
+}
