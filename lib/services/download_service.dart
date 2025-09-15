@@ -31,6 +31,13 @@ class DownloadService {
     }
     chapter.isDownloaded = chapter.totalPages > 0 && chapter.downloadedPages >= chapter.totalPages;
   }
+
+  /// 通用文件下载
+  Future<String> downloadFile({required String url, required String savePath}) async {
+    await ensureDir(p.dirname(savePath));
+    await _dio.download(url, savePath);
+    return savePath;
+  }
 }
 
 

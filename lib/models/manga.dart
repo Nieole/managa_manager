@@ -63,6 +63,9 @@ class Manga {
   // 是否已下载
   bool isDownloaded = false;
 
+  // 本地封面文件路径
+  String coverLocalPath = "";
+
   // 是否已收藏
   bool isFavorite = false;
 

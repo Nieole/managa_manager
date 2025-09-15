@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:isar/isar.dart';
@@ -7,6 +8,9 @@ import '../graphql/chapters.graphql.dart';
 import '../models/chapter.dart';
 import '../models/manga.dart';
 import '../services/isar_service.dart';
+import '../repositories/settings_repository.dart';
+import '../services/download_service.dart';
+import 'package:path/path.dart' as p;
 
 class MangaRepository {
   MangaRepository({GraphQLClient? client, BuildContext? context}) 
@@ -156,10 +160,59 @@ class MangaRepository {
         m.localPath = exist.localPath;
         m.isDownloaded = exist.isDownloaded;
         m.isFavorite = exist.isFavorite; // 保持收藏状态
+        m.coverLocalPath = exist.coverLocalPath;
       }
       await isar.mangas.put(m);
     });
+
+    // 下载封面到设置目录的 titles 文件夹
+    try {
+      if (shouldCancel != null && shouldCancel()) {
+        throw Exception('操作已取消');
+      }
+      await _ensureCoverDownloaded(m);
+    } catch (_) {}
     return m;
+  }
+
+  // 确保封面已下载并更新本地路径
+  Future<void> _ensureCoverDownloaded(Manga manga) async {
+    if (manga.imageUrl.isEmpty) return;
+    final settingsRepo = SettingsRepository();
+    final base = await settingsRepo.getSavePath();
+    if (base == null || base.isEmpty) return;
+    final titlesDir = p.join(base, 'titles');
+
+    // 生成不重复文件名：title_slug__id.ext
+    final uri = Uri.tryParse(manga.imageUrl);
+    final ext = (uri != null && uri.path.contains('.')) ? uri.path.split('.').last : 'jpg';
+    final safeTitle = manga.title.isEmpty ? manga.mangaId : manga.title;
+    final sanitized = safeTitle.replaceAll(RegExp(r'[^\w\u4e00-\u9fa5\-]+'), '_');
+    final fileName = '${sanitized}__${manga.mangaId}.$ext';
+    final savePath = p.join(titlesDir, fileName);
+
+    // 若已有并且存在则直接使用
+    if (manga.coverLocalPath.isNotEmpty) {
+      final f = File(manga.coverLocalPath);
+      if (await f.exists()) return;
+    }
+    final f2 = File(savePath);
+    if (await f2.exists()) {
+      final isar = await IsarService.getInstance();
+      manga.coverLocalPath = savePath;
+      await isar.writeTxn(() async {
+        await isar.mangas.put(manga);
+      });
+      return;
+    }
+
+    final downloader = DownloadService();
+    await downloader.downloadFile(url: manga.imageUrl, savePath: savePath);
+    final isar = await IsarService.getInstance();
+    manga.coverLocalPath = savePath;
+    await isar.writeTxn(() async {
+      await isar.mangas.put(manga);
+    });
   }
 
   // 切换收藏状态

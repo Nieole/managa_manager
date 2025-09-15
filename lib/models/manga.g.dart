@@ -32,133 +32,138 @@ const MangaSchema = CollectionSchema(
       name: r'categories',
       type: IsarType.stringList,
     ),
-    r'createdAt': PropertySchema(
+    r'coverLocalPath': PropertySchema(
       id: 3,
+      name: r'coverLocalPath',
+      type: IsarType.string,
+    ),
+    r'createdAt': PropertySchema(
+      id: 4,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'dateCreated': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'dateCreated',
       type: IsarType.string,
     ),
     r'dateUpdated': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'dateUpdated',
       type: IsarType.string,
     ),
     r'description': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'description',
       type: IsarType.string,
     ),
     r'favoriteCount': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'favoriteCount',
       type: IsarType.long,
     ),
     r'imageUrl': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'imageUrl',
       type: IsarType.string,
     ),
     r'isCompleted': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'isCompleted',
       type: IsarType.bool,
     ),
     r'isDownloaded': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'isDownloaded',
       type: IsarType.bool,
     ),
     r'isFavorite': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'isFavorite',
       type: IsarType.bool,
     ),
     r'lastBookUpdate': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'lastBookUpdate',
       type: IsarType.string,
     ),
     r'lastChapterUpdate': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'lastChapterUpdate',
       type: IsarType.string,
     ),
     r'localPath': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'localPath',
       type: IsarType.string,
     ),
     r'mangaId': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'mangaId',
       type: IsarType.string,
     ),
     r'monthViews': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'monthViews',
       type: IsarType.long,
     ),
     r'ntr': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'ntr',
       type: IsarType.bool,
     ),
     r'otherTitles': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'otherTitles',
       type: IsarType.stringList,
     ),
     r'reasons': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'reasons',
       type: IsarType.stringList,
     ),
     r'sexualContent': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'sexualContent',
       type: IsarType.bool,
     ),
     r'sexyLevel': PropertySchema(
-      id: 21,
+      id: 22,
       name: r'sexyLevel',
       type: IsarType.long,
     ),
     r'sexyLevelReason': PropertySchema(
-      id: 22,
+      id: 23,
       name: r'sexyLevelReason',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 23,
+      id: 24,
       name: r'status',
       type: IsarType.string,
     ),
     r'title': PropertySchema(
-      id: 24,
+      id: 25,
       name: r'title',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 25,
+      id: 26,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'views': PropertySchema(
-      id: 26,
+      id: 27,
       name: r'views',
       type: IsarType.long,
     ),
     r'warnings': PropertySchema(
-      id: 27,
+      id: 28,
       name: r'warnings',
       type: IsarType.stringList,
     ),
     r'year': PropertySchema(
-      id: 28,
+      id: 29,
       name: r'year',
       type: IsarType.long,
     )
@@ -213,6 +218,7 @@ int _mangaEstimateSize(
       bytesCount += value.length * 3;
     }
   }
+  bytesCount += 3 + object.coverLocalPath.length * 3;
   {
     final value = object.dateCreated;
     if (value != null) {
@@ -287,32 +293,33 @@ void _mangaSerialize(
   writer.writeBool(offsets[0], object.adult);
   writer.writeString(offsets[1], object.author);
   writer.writeStringList(offsets[2], object.categories);
-  writer.writeDateTime(offsets[3], object.createdAt);
-  writer.writeString(offsets[4], object.dateCreated);
-  writer.writeString(offsets[5], object.dateUpdated);
-  writer.writeString(offsets[6], object.description);
-  writer.writeLong(offsets[7], object.favoriteCount);
-  writer.writeString(offsets[8], object.imageUrl);
-  writer.writeBool(offsets[9], object.isCompleted);
-  writer.writeBool(offsets[10], object.isDownloaded);
-  writer.writeBool(offsets[11], object.isFavorite);
-  writer.writeString(offsets[12], object.lastBookUpdate);
-  writer.writeString(offsets[13], object.lastChapterUpdate);
-  writer.writeString(offsets[14], object.localPath);
-  writer.writeString(offsets[15], object.mangaId);
-  writer.writeLong(offsets[16], object.monthViews);
-  writer.writeBool(offsets[17], object.ntr);
-  writer.writeStringList(offsets[18], object.otherTitles);
-  writer.writeStringList(offsets[19], object.reasons);
-  writer.writeBool(offsets[20], object.sexualContent);
-  writer.writeLong(offsets[21], object.sexyLevel);
-  writer.writeString(offsets[22], object.sexyLevelReason);
-  writer.writeString(offsets[23], object.status);
-  writer.writeString(offsets[24], object.title);
-  writer.writeDateTime(offsets[25], object.updatedAt);
-  writer.writeLong(offsets[26], object.views);
-  writer.writeStringList(offsets[27], object.warnings);
-  writer.writeLong(offsets[28], object.year);
+  writer.writeString(offsets[3], object.coverLocalPath);
+  writer.writeDateTime(offsets[4], object.createdAt);
+  writer.writeString(offsets[5], object.dateCreated);
+  writer.writeString(offsets[6], object.dateUpdated);
+  writer.writeString(offsets[7], object.description);
+  writer.writeLong(offsets[8], object.favoriteCount);
+  writer.writeString(offsets[9], object.imageUrl);
+  writer.writeBool(offsets[10], object.isCompleted);
+  writer.writeBool(offsets[11], object.isDownloaded);
+  writer.writeBool(offsets[12], object.isFavorite);
+  writer.writeString(offsets[13], object.lastBookUpdate);
+  writer.writeString(offsets[14], object.lastChapterUpdate);
+  writer.writeString(offsets[15], object.localPath);
+  writer.writeString(offsets[16], object.mangaId);
+  writer.writeLong(offsets[17], object.monthViews);
+  writer.writeBool(offsets[18], object.ntr);
+  writer.writeStringList(offsets[19], object.otherTitles);
+  writer.writeStringList(offsets[20], object.reasons);
+  writer.writeBool(offsets[21], object.sexualContent);
+  writer.writeLong(offsets[22], object.sexyLevel);
+  writer.writeString(offsets[23], object.sexyLevelReason);
+  writer.writeString(offsets[24], object.status);
+  writer.writeString(offsets[25], object.title);
+  writer.writeDateTime(offsets[26], object.updatedAt);
+  writer.writeLong(offsets[27], object.views);
+  writer.writeStringList(offsets[28], object.warnings);
+  writer.writeLong(offsets[29], object.year);
 }
 
 Manga _mangaDeserialize(
@@ -325,30 +332,31 @@ Manga _mangaDeserialize(
   object.adult = reader.readBoolOrNull(offsets[0]);
   object.author = reader.readString(offsets[1]);
   object.categories = reader.readStringList(offsets[2]) ?? [];
-  object.dateCreated = reader.readStringOrNull(offsets[4]);
-  object.dateUpdated = reader.readStringOrNull(offsets[5]);
-  object.description = reader.readStringOrNull(offsets[6]);
-  object.favoriteCount = reader.readLong(offsets[7]);
+  object.coverLocalPath = reader.readString(offsets[3]);
+  object.dateCreated = reader.readStringOrNull(offsets[5]);
+  object.dateUpdated = reader.readStringOrNull(offsets[6]);
+  object.description = reader.readStringOrNull(offsets[7]);
+  object.favoriteCount = reader.readLong(offsets[8]);
   object.id = id;
-  object.imageUrl = reader.readString(offsets[8]);
-  object.isDownloaded = reader.readBool(offsets[10]);
-  object.isFavorite = reader.readBool(offsets[11]);
-  object.lastBookUpdate = reader.readStringOrNull(offsets[12]);
-  object.lastChapterUpdate = reader.readStringOrNull(offsets[13]);
-  object.localPath = reader.readString(offsets[14]);
-  object.mangaId = reader.readString(offsets[15]);
-  object.monthViews = reader.readLongOrNull(offsets[16]);
-  object.ntr = reader.readBoolOrNull(offsets[17]);
-  object.otherTitles = reader.readStringList(offsets[18]) ?? [];
-  object.reasons = reader.readStringList(offsets[19]) ?? [];
-  object.sexualContent = reader.readBoolOrNull(offsets[20]);
-  object.sexyLevel = reader.readLongOrNull(offsets[21]);
-  object.sexyLevelReason = reader.readStringOrNull(offsets[22]);
-  object.status = reader.readString(offsets[23]);
-  object.title = reader.readString(offsets[24]);
-  object.views = reader.readLongOrNull(offsets[26]);
-  object.warnings = reader.readStringList(offsets[27]) ?? [];
-  object.year = reader.readLong(offsets[28]);
+  object.imageUrl = reader.readString(offsets[9]);
+  object.isDownloaded = reader.readBool(offsets[11]);
+  object.isFavorite = reader.readBool(offsets[12]);
+  object.lastBookUpdate = reader.readStringOrNull(offsets[13]);
+  object.lastChapterUpdate = reader.readStringOrNull(offsets[14]);
+  object.localPath = reader.readString(offsets[15]);
+  object.mangaId = reader.readString(offsets[16]);
+  object.monthViews = reader.readLongOrNull(offsets[17]);
+  object.ntr = reader.readBoolOrNull(offsets[18]);
+  object.otherTitles = reader.readStringList(offsets[19]) ?? [];
+  object.reasons = reader.readStringList(offsets[20]) ?? [];
+  object.sexualContent = reader.readBoolOrNull(offsets[21]);
+  object.sexyLevel = reader.readLongOrNull(offsets[22]);
+  object.sexyLevelReason = reader.readStringOrNull(offsets[23]);
+  object.status = reader.readString(offsets[24]);
+  object.title = reader.readString(offsets[25]);
+  object.views = reader.readLongOrNull(offsets[27]);
+  object.warnings = reader.readStringList(offsets[28]) ?? [];
+  object.year = reader.readLong(offsets[29]);
   return object;
 }
 
@@ -366,56 +374,58 @@ P _mangaDeserializeProp<P>(
     case 2:
       return (reader.readStringList(offset) ?? []) as P;
     case 3:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 5:
       return (reader.readStringOrNull(offset)) as P;
     case 6:
       return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readLong(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 8:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 9:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 10:
       return (reader.readBool(offset)) as P;
     case 11:
       return (reader.readBool(offset)) as P;
     case 12:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 13:
       return (reader.readStringOrNull(offset)) as P;
     case 14:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 15:
       return (reader.readString(offset)) as P;
     case 16:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 17:
-      return (reader.readBoolOrNull(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 18:
-      return (reader.readStringList(offset) ?? []) as P;
+      return (reader.readBoolOrNull(offset)) as P;
     case 19:
       return (reader.readStringList(offset) ?? []) as P;
     case 20:
-      return (reader.readBoolOrNull(offset)) as P;
+      return (reader.readStringList(offset) ?? []) as P;
     case 21:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readBoolOrNull(offset)) as P;
     case 22:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 23:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 24:
       return (reader.readString(offset)) as P;
     case 25:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 26:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 27:
-      return (reader.readStringList(offset) ?? []) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 28:
+      return (reader.readStringList(offset) ?? []) as P;
+    case 29:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -976,6 +986,136 @@ extension MangaQueryFilter on QueryBuilder<Manga, Manga, QFilterCondition> {
         upper,
         includeUpper,
       );
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'coverLocalPath',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'coverLocalPath',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'coverLocalPath',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'coverLocalPath',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterFilterCondition> coverLocalPathIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'coverLocalPath',
+        value: '',
+      ));
     });
   }
 
@@ -3822,6 +3962,18 @@ extension MangaQuerySortBy on QueryBuilder<Manga, Manga, QSortBy> {
     });
   }
 
+  QueryBuilder<Manga, Manga, QAfterSortBy> sortByCoverLocalPath() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'coverLocalPath', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterSortBy> sortByCoverLocalPathDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'coverLocalPath', Sort.desc);
+    });
+  }
+
   QueryBuilder<Manga, Manga, QAfterSortBy> sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -4121,6 +4273,18 @@ extension MangaQuerySortThenBy on QueryBuilder<Manga, Manga, QSortThenBy> {
   QueryBuilder<Manga, Manga, QAfterSortBy> thenByAuthorDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'author', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterSortBy> thenByCoverLocalPath() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'coverLocalPath', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Manga, Manga, QAfterSortBy> thenByCoverLocalPathDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'coverLocalPath', Sort.desc);
     });
   }
 
@@ -4433,6 +4597,14 @@ extension MangaQueryWhereDistinct on QueryBuilder<Manga, Manga, QDistinct> {
     });
   }
 
+  QueryBuilder<Manga, Manga, QDistinct> distinctByCoverLocalPath(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'coverLocalPath',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Manga, Manga, QDistinct> distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -4626,6 +4798,12 @@ extension MangaQueryProperty on QueryBuilder<Manga, Manga, QQueryProperty> {
   QueryBuilder<Manga, List<String>, QQueryOperations> categoriesProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'categories');
+    });
+  }
+
+  QueryBuilder<Manga, String, QQueryOperations> coverLocalPathProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'coverLocalPath');
     });
   }
 

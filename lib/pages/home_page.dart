@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:isar/isar.dart';
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:managa_manager/models/chapter.dart';
 
@@ -11,6 +12,8 @@ import '../services/download_service.dart';
 import '../services/isar_service.dart';
 import '../services/path_service.dart';
 import 'manga_detail_page.dart';
+import '../repositories/settings_repository.dart';
+import '../services/download_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -44,6 +47,55 @@ class _HomePageState extends State<HomePage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _mangaRepo = MangaRepository(context: context);
+  }
+
+  // 将状态英文转中文
+  String _statusToZh(String status) {
+    final s = status.toLowerCase();
+    if (s.contains('complete') || s.contains('completed') || s == 'end') return '完结';
+    if (s.contains('ongoing') || s.contains('serialize') || s.contains('serial')) return '连载中';
+    if (s.contains('pause') || s.contains('hiatus')) return '暂停';
+    return status; // 默认原文
+  }
+
+  // 构建封面组件：优先本地加载，本地不存在则触发下载后再加载
+  Widget _buildCover(BuildContext context, Manga m) {
+    final box = Container(
+      width: 60,
+      height: 80,
+      color: Colors.grey[300],
+      child: const Icon(Icons.image, color: Colors.grey),
+    );
+
+    Future<File?> getLocal() async {
+      if (m.coverLocalPath.isNotEmpty) {
+        final f = File(m.coverLocalPath);
+        if (await f.exists()) return f;
+      }
+      // 本地没有则尝试下载
+      await _mangaRepo.refreshMangaById(m.mangaId); // 获取最新imageUrl并保存
+      await _mangaRepo
+          .refreshMangaById(m.mangaId); // 再次确保封面已下载（内部有ensureCoverDownloaded）
+      if (m.coverLocalPath.isNotEmpty) {
+        final f2 = File(m.coverLocalPath);
+        if (await f2.exists()) return f2;
+      }
+      return null;
+    }
+
+    return FutureBuilder<File?>(
+      future: getLocal(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return box;
+        }
+        final file = snap.data;
+        if (file != null) {
+          return Image.file(file, width: 60, height: 80, fit: BoxFit.cover);
+        }
+        return box;
+      },
+    );
   }
 
   Future<List<Manga>> _queryPage(Isar isar) async {
@@ -418,31 +470,7 @@ class _HomePageState extends State<HomePage> {
                                               )
                                             : ClipRRect(
                                                 borderRadius: BorderRadius.circular(8),
-                                                child: m.imageUrl.isNotEmpty
-                                                    ? CachedNetworkImage(
-                                                        imageUrl: m.imageUrl,
-                                                        width: 60,
-                                                        height: 80,
-                                                        fit: BoxFit.cover,
-                                                        placeholder: (context, url) => Container(
-                                                          width: 60,
-                                                          height: 80,
-                                                          color: Colors.grey[300],
-                                                          child: const Icon(Icons.image, color: Colors.grey),
-                                                        ),
-                                                        errorWidget: (context, url, error) => Container(
-                                                          width: 60,
-                                                          height: 80,
-                                                          color: Colors.grey[300],
-                                                          child: const Icon(Icons.broken_image, color: Colors.grey),
-                                                        ),
-                                                      )
-                                                    : Container(
-                                                        width: 60,
-                                                        height: 80,
-                                                        color: Colors.grey[300],
-                                                        child: const Icon(Icons.image, color: Colors.grey),
-                                                      ),
+                                                child: _buildCover(context, m),
                                               ),
                                         title: Text(
                                           m.title.isEmpty ? m.mangaId : m.title,
@@ -475,13 +503,13 @@ class _HomePageState extends State<HomePage> {
                                                   ),
                                                 ],
                                               ),
-                                            // 连载状态 + 更新时间
+                                            // 连载状态(中文) + 更新时间
                                             Row(
                                               children: [
                                                 Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  m.status,
+                                                  _statusToZh(m.status),
                                                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                                 ),
                                                 const SizedBox(width: 12),
