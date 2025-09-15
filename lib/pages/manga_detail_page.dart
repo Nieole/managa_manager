@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import '../models/chapter.dart';
 import '../models/manga.dart';
@@ -83,11 +84,18 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               final isar = await _isarFuture;
               final m = await isar.mangas.get(widget.mangaId);
               if (m == null) return;
-              await _repo.syncChaptersFor(m);
+              try {
+                EasyLoading.show(status: '检查更新...');
+                // 调用刷新：仓库内部会根据更新时间自动决定是否同步章节
+                await _repo.refreshMangaById(m.mangaId);
+                EasyLoading.dismiss();
+              } catch (_) {
+                EasyLoading.dismiss();
+              }
               if (mounted) setState(() {});
             },
             icon: const Icon(Icons.sync),
-            tooltip: '同步章节',
+            tooltip: '检查并同步章节',
           ),
         ],
       ),

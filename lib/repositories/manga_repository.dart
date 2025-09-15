@@ -13,32 +13,42 @@ import '../services/download_service.dart';
 import 'package:path/path.dart' as p;
 
 class MangaRepository {
-  MangaRepository({GraphQLClient? client, BuildContext? context}) 
-      : _client = client ?? (context != null ? GraphQLProvider.of(context).value : throw ArgumentError('Either client or context must be provided'));
+  MangaRepository({GraphQLClient? client, BuildContext? context})
+    : _client =
+          client ??
+          (context != null
+              ? GraphQLProvider.of(context).value
+              : throw ArgumentError(
+                  'Either client or context must be provided',
+                ));
 
   final GraphQLClient _client;
 
   // 使用生成的 GraphQL 代码
 
-  Future<void> syncAllManga({int startId = 1, Function(Manga)? onMangaAdded, bool Function()? shouldCancel}) async {
+  Future<void> syncAllManga({
+    int startId = 1,
+    Function(Manga)? onMangaAdded,
+    bool Function()? shouldCancel,
+  }) async {
     int comicId = startId;
     int consecutiveNotFoundCount = 0;
     const int maxConsecutiveNotFound = 10;
-    
+
     while (true) {
       // 检查是否应该取消
       if (shouldCancel != null && shouldCancel()) {
         throw Exception('操作已取消');
       }
-      
+
       try {
         final manga = await fetchAndUpsertComicById(comicId.toString());
-        
+
         // 检查是否应该取消
         if (shouldCancel != null && shouldCancel()) {
           throw Exception('操作已取消');
         }
-        
+
         if (manga == null) {
           // 如果返回 null，说明该 ID 不存在，继续下一个
           comicId++;
@@ -50,28 +60,30 @@ class MangaRepository {
         comicId++;
       } catch (e) {
         final errorMessage = e.toString();
-        
+
         // 检查是否是取消操作
         if (errorMessage.contains('操作已取消')) {
           throw e; // 重新抛出取消异常
         }
-        
+
         // 检查是否是"no rows in result set"错误
-        if (errorMessage.contains('sql: no rows in result set') || 
+        if (errorMessage.contains('sql: no rows in result set') ||
             errorMessage.contains('Failed to retrieve comic by ID')) {
           consecutiveNotFoundCount++;
-          print('ID $comicId 不存在 (连续未找到: $consecutiveNotFoundCount/$maxConsecutiveNotFound)');
-          
+          print(
+            'ID $comicId 不存在 (连续未找到: $consecutiveNotFoundCount/$maxConsecutiveNotFound)',
+          );
+
           // 如果连续未找到达到上限，停止扫描
           if (consecutiveNotFoundCount >= maxConsecutiveNotFound) {
             print('连续 $maxConsecutiveNotFound 个ID不存在，停止扫描');
             break;
           }
-          
+
           comicId++;
           continue;
         }
-        
+
         // 其他错误，停止扫描
         print('扫描到 ID $comicId 时遇到错误: $e');
         break;
@@ -81,37 +93,50 @@ class MangaRepository {
 
   Future<Manga?> fetchAndUpsertComicById(String comicId) async {
     final isar = await IsarService.getInstance();
-    
+
     final options = Options$Query$ComicById(
       variables: Variables$Query$ComicById(comicId: comicId),
     );
-    
+
     final result = await _client.query$ComicById(options);
-    
+
     if (result.hasException) {
       throw Exception('GraphQL error: ${result.exception}');
     }
-    
+
     final data = result.parsedData;
     if (data == null) return null;
     final comic = data.comicById;
     if (comic == null) return null;
-    
+
     final m = _mapComicToManga(comic)..mangaId = comic.id;
-    
+
+    // 先读取现有数据与章节数量（避免在事务内加载链接导致嵌套事务）
+    final exist = await isar.mangas
+        .filter()
+        .mangaIdEqualTo(m.mangaId)
+        .findFirst();
+    int existingChapterCount = 0;
+    if (exist != null) {
+      existingChapterCount = await isar.chapters
+          .filter()
+          .manga((q) => q.idEqualTo(exist.id))
+          .count();
+    }
     bool needSyncChapters = false;
+    if (exist == null) {
+      needSyncChapters = true;
+    } else {
+      needSyncChapters = (exist.dateUpdated != m.dateUpdated) || existingChapterCount == 0;
+    }
+
     await isar.writeTxn(() async {
-      final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
       if (exist != null) {
         m.id = exist.id;
         m.localPath = exist.localPath;
         m.isDownloaded = exist.isDownloaded;
-        m.isFavorite = exist.isFavorite; // 保持收藏状态
+        m.isFavorite = exist.isFavorite;
         m.coverLocalPath = exist.coverLocalPath;
-        // 若更新时间变化则需要同步章节
-        needSyncChapters = (exist.dateUpdated != m.dateUpdated);
-      } else {
-        needSyncChapters = true; // 新漫画需要同步章节
       }
       await isar.mangas.put(m);
     });
@@ -127,59 +152,75 @@ class MangaRepository {
   }
 
   // 刷新单条漫画数据
-  Future<Manga?> refreshMangaById(String mangaId, {bool Function()? shouldCancel}) async {
+  Future<Manga?> refreshMangaById(
+    String mangaId, {
+    bool Function()? shouldCancel,
+  }) async {
     final isar = await IsarService.getInstance();
-    
+
     // 检查是否应该取消
     if (shouldCancel != null && shouldCancel()) {
       throw Exception('操作已取消');
     }
-    
+
     final options = Options$Query$ComicById(
       variables: Variables$Query$ComicById(comicId: mangaId),
     );
-    
+
     // 检查是否应该取消
     if (shouldCancel != null && shouldCancel()) {
       throw Exception('操作已取消');
     }
-    
+
     final result = await _client.query$ComicById(options);
-    
+
     // 检查是否应该取消
     if (shouldCancel != null && shouldCancel()) {
       throw Exception('操作已取消');
     }
-    
+
     if (result.hasException) {
       throw Exception('GraphQL error: ${result.exception}');
     }
-    
+
     final data = result.parsedData;
     if (data == null) return null;
     final comic = data.comicById;
     if (comic == null) return null;
-    
+
     final m = _mapComicToManga(comic)..mangaId = comic.id;
-    
+
     // 检查是否应该取消
     if (shouldCancel != null && shouldCancel()) {
       throw Exception('操作已取消');
     }
-    
+
+    // 先读取现有数据与章节数量（避免在事务内加载链接导致嵌套事务）
+    final exist = await isar.mangas
+        .filter()
+        .mangaIdEqualTo(m.mangaId)
+        .findFirst();
+    int existingChapterCount2 = 0;
+    if (exist != null) {
+      existingChapterCount2 = await isar.chapters
+          .filter()
+          .manga((q) => q.idEqualTo(exist.id))
+          .count();
+    }
     bool needSyncChapters = false;
+    if (exist == null) {
+      needSyncChapters = true;
+    } else {
+      needSyncChapters = (exist.dateUpdated != m.dateUpdated) || existingChapterCount2 == 0;
+    }
+
     await isar.writeTxn(() async {
-      final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
       if (exist != null) {
         m.id = exist.id;
         m.localPath = exist.localPath;
         m.isDownloaded = exist.isDownloaded;
         m.isFavorite = exist.isFavorite; // 保持收藏状态
         m.coverLocalPath = exist.coverLocalPath;
-        // 若更新时间变化则需要同步章节
-        needSyncChapters = (exist.dateUpdated != m.dateUpdated);
-      } else {
-        needSyncChapters = true; // 新漫画需要同步章节
       }
       await isar.mangas.put(m);
     });
@@ -213,9 +254,14 @@ class MangaRepository {
 
     // 生成不重复文件名：title_slug__id.ext
     final uri = Uri.tryParse(manga.imageUrl);
-    final ext = (uri != null && uri.path.contains('.')) ? uri.path.split('.').last : 'jpg';
+    final ext = (uri != null && uri.path.contains('.'))
+        ? uri.path.split('.').last
+        : 'jpg';
     final safeTitle = manga.title.isEmpty ? manga.mangaId : manga.title;
-    final sanitized = safeTitle.replaceAll(RegExp(r'[^\w\u4e00-\u9fa5\-]+'), '_');
+    final sanitized = safeTitle.replaceAll(
+      RegExp(r'[^\w\u4e00-\u9fa5\-]+'),
+      '_',
+    );
     final fileName = '${sanitized}__${manga.mangaId}.$ext';
     final savePath = p.join(titlesDir, fileName);
 
@@ -247,7 +293,10 @@ class MangaRepository {
   Future<void> toggleFavorite(String mangaId) async {
     final isar = await IsarService.getInstance();
     await isar.writeTxn(() async {
-      final manga = await isar.mangas.filter().mangaIdEqualTo(mangaId).findFirst();
+      final manga = await isar.mangas
+          .filter()
+          .mangaIdEqualTo(mangaId)
+          .findFirst();
       if (manga != null) {
         manga.isFavorite = !manga.isFavorite;
         await isar.mangas.put(manga);
@@ -257,17 +306,17 @@ class MangaRepository {
 
   Future<void> syncChaptersFor(Manga manga) async {
     final isar = await IsarService.getInstance();
-    
+
     final options = Options$Query$ChaptersByComicId(
       variables: Variables$Query$ChaptersByComicId(comicId: manga.mangaId),
     );
-    
+
     final result = await _client.query$ChaptersByComicId(options);
-    
+
     if (result.hasException) {
       throw Exception('GraphQL error: ${result.exception}');
     }
-    
+
     final data = result.parsedData;
     if (data == null) return;
     final chapters = data.chaptersByComicId;
@@ -276,7 +325,7 @@ class MangaRepository {
       for (int i = 0; i < chapters.length; i++) {
         final c = chapters[i];
         if (c == null) continue; // 跳过 null 章节
-        
+
         final chapterId = c.id;
         int totalPages = 0;
         List<ChapterImage> images = [];
@@ -295,12 +344,14 @@ class MangaRepository {
             });
             for (final img in imgs) {
               if (img == null) continue;
-              images.add(ChapterImage()
-                ..id = img.id
-                ..width = img.width
-                ..height = img.height
-                ..kid = img.kid
-                ..orderNumber = img.orderNumber);
+              images.add(
+                ChapterImage()
+                  ..id = img.id
+                  ..width = img.width
+                  ..height = img.height
+                  ..kid = img.kid
+                  ..orderNumber = img.orderNumber,
+              );
             }
             totalPages = imgs.length;
           }
@@ -314,7 +365,10 @@ class MangaRepository {
           ..images = images;
         chapter.manga.value = manga;
 
-        final exist = await isar.chapters.filter().chapterIdEqualTo(chapter.chapterId).findFirst();
+        final exist = await isar.chapters
+            .filter()
+            .chapterIdEqualTo(chapter.chapterId)
+            .findFirst();
         if (exist != null) {
           chapter.id = exist.id;
           chapter.localPath = exist.localPath;
@@ -334,13 +388,13 @@ class MangaRepository {
     final options = Options$Query$GetDownloadChapterUrl(
       variables: Variables$Query$GetDownloadChapterUrl(chapterId: chapterId),
     );
-    
+
     final result = await _client.query$GetDownloadChapterUrl(options);
-    
+
     if (result.hasException) {
       throw Exception('GraphQL error: ${result.exception}');
     }
-    
+
     final data = result.parsedData;
     if (data == null) return null;
     final downloadUrl = data.getDownloadChapterUrl;
@@ -417,5 +471,3 @@ class MangaRepository {
       ..categories = categories;
   }
 }
-
-
