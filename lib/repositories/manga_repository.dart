@@ -230,11 +230,11 @@ class MangaRepository {
     });
   }
 
-  Future<void> syncChaptersFor(String mangaId) async {
+  Future<void> syncChaptersFor(Manga manga) async {
     final isar = await IsarService.getInstance();
     
     final options = Options$Query$ChaptersByComicId(
-      variables: Variables$Query$ChaptersByComicId(comicId: mangaId),
+      variables: Variables$Query$ChaptersByComicId(comicId: manga.mangaId),
     );
     
     final result = await _client.query$ChaptersByComicId(options);
@@ -248,21 +248,36 @@ class MangaRepository {
     final chapters = data.chaptersByComicId;
 
     await isar.writeTxn(() async {
-      final manga = await isar.mangas.filter().mangaIdEqualTo(mangaId).findFirst();
-      if (manga == null) return;
       for (int i = 0; i < chapters.length; i++) {
         final c = chapters[i];
         if (c == null) continue; // 跳过 null 章节
         
         final chapterId = c.id;
         int totalPages = 0;
+        List<ChapterImage> images = [];
         try {
           final imgOptions = Options$Query$ImagesByChapterId(
             variables: Variables$Query$ImagesByChapterId(chapterId: chapterId),
           );
           final imgResult = await _client.query$ImagesByChapterId(imgOptions);
           if (!imgResult.hasException && imgResult.parsedData != null) {
-            totalPages = imgResult.parsedData!.imagesByChapterId.length;
+            final imgs = imgResult.parsedData!.imagesByChapterId;
+            // 按顺序排序
+            imgs.sort((a, b) {
+              final ao = a?.orderNumber ?? 0;
+              final bo = b?.orderNumber ?? 0;
+              return ao.compareTo(bo);
+            });
+            for (final img in imgs) {
+              if (img == null) continue;
+              images.add(ChapterImage()
+                ..id = img.id
+                ..width = img.width
+                ..height = img.height
+                ..kid = img.kid
+                ..orderNumber = img.orderNumber);
+            }
+            totalPages = imgs.length;
           }
         } catch (_) {}
 
@@ -270,7 +285,8 @@ class MangaRepository {
           ..chapterId = chapterId
           ..title = c.serial
           ..orderIndex = i
-          ..totalPages = totalPages;
+          ..totalPages = totalPages
+          ..images = images;
         chapter.manga.value = manga;
 
         final exist = await isar.chapters.filter().chapterIdEqualTo(chapter.chapterId).findFirst();
@@ -279,7 +295,9 @@ class MangaRepository {
           chapter.localPath = exist.localPath;
           chapter.downloadedPages = exist.downloadedPages;
           chapter.isDownloaded = exist.isDownloaded;
-          chapter.pageUrls = exist.pageUrls;
+          if (chapter.images.isEmpty) {
+            chapter.images = exist.images;
+          }
         }
         await isar.chapters.put(chapter);
         await chapter.manga.save();

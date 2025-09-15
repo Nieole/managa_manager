@@ -49,7 +49,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               final isar = await _isarFuture;
               final m = await isar.mangas.get(widget.mangaId);
               if (m == null) return;
-              await _repo.syncChaptersFor(m.mangaId);
+              await _repo.syncChaptersFor(m);
               if (mounted) setState(() {});
             },
             icon: const Icon(Icons.sync),

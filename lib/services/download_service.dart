@@ -18,15 +18,52 @@ class DownloadService {
   }
 
   Future<void> downloadChapter(Chapter chapter, String baseDir) async {
-    final chapterDir = p.join(baseDir, chapter.chapterId);
+    if(chapter.isDownloaded){
+      return;
+    }
+    // 确保已加载所属漫画信息
+    try {
+      await chapter.manga.load();
+    } catch (_) {}
+
+    // 组装目录：baseDir/<mangaTitle__mangaId>/<chapterTitle__chapterId>
+    final mangaId = chapter.manga.value?.mangaId ?? '';
+    final mangaTitle = chapter.manga.value?.title ?? mangaId;
+    final chapterTitle = chapter.title.isEmpty ? chapter.chapterId : chapter.title;
+    final mangaDirName = _sanitizeName('${mangaTitle}__${mangaId}');
+    final chapterDirName = _sanitizeName('${chapterTitle}__${chapter.chapterId}');
+    final mangaDir = p.join(baseDir, mangaDirName);
+    final chapterDir = p.join(mangaDir, chapterDirName);
+    await ensureDir(mangaDir);
     await ensureDir(chapterDir);
     chapter.localPath = chapterDir;
+    // 同步漫画的本地路径
+    if (chapter.manga.value != null) {
+      chapter.manga.value!.localPath = mangaDir;
+    }
     // 这里仅保留接口，真实的图片 URL 获取依赖 GraphQL 具体字段
+    // 需要添加referer
+    final referer = 'https://komiic.com/comic/${chapter.manga.value?.mangaId}/chapter/${chapter.chapterId}/images/all';
     for (int i = chapter.downloadedPages; i < chapter.totalPages; i++) {
-      final url = i < chapter.pageUrls.length ? chapter.pageUrls[i] : null;
-      if (url == null || url.isEmpty) break;
-      final saveFile = p.join(chapterDir, '${i + 1}.jpg');
-      await _dio.download(url, saveFile);
+      final img = i < chapter.images.length ? chapter.images[i] : null;
+      if (img == null || img.kid.isEmpty) break;
+      final saveFile = p.join(chapterDir, '${img.orderNumber}.jpg');
+
+      // 若文件已存在则跳过下载并推进进度
+      final f = File(saveFile);
+      if (await f.exists()) {
+        chapter.downloadedPages = i + 1;
+        continue;
+      }
+      try {
+        await _dio.download(
+          "https://komiic.com/api/image/${img.kid}",
+          saveFile,
+          options: Options(
+            headers: {'referer': referer},
+          ),
+        );
+      } catch (_) {}
       chapter.downloadedPages = i + 1;
     }
     chapter.isDownloaded = chapter.totalPages > 0 && chapter.downloadedPages >= chapter.totalPages;
@@ -37,6 +74,23 @@ class DownloadService {
     await ensureDir(p.dirname(savePath));
     await _dio.download(url, savePath);
     return savePath;
+  }
+
+  // 过滤 Windows 特殊字符，去除控制字符，并裁剪长度
+  String _sanitizeName(String name) {
+    // 移除非法字符 <>:"/\|?* 以及控制字符
+    final sanitized = name
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+        .replaceAll(RegExp(r'[\x00-\x1F]'), '')
+        .trim();
+    // 避免结尾为空或仅由点/空格组成
+    var result = sanitized.replaceAll(RegExp(r'[ .]+$'), '');
+    if (result.isEmpty) result = 'untitled';
+    // 限制长度，避免超长路径问题
+    if (result.length > 120) {
+      result = result.substring(0, 120);
+    }
+    return result;
   }
 }
 

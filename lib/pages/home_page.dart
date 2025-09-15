@@ -138,7 +138,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<List<Manga>> _queryPage(Isar isar) async {
     final filterText = _searchController.text.trim();
-    
+
     // 构建查询条件
     if (_showFavoritesOnly && filterText.isNotEmpty) {
       // 收藏 + 搜索
@@ -182,7 +182,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<int> _getTotalCount(Isar isar) async {
     final filterText = _searchController.text.trim();
-    
+
     // 构建查询条件
     if (_showFavoritesOnly && filterText.isNotEmpty) {
       // 收藏 + 搜索
@@ -227,19 +227,19 @@ class _HomePageState extends State<HomePage> {
       }
       return;
     }
-    
+
     // 开始同步
     setState(() {
       _isAnalyzing = true;
     });
-    
+
     try {
       EasyLoading.show(status: '同步中... (点击同步按钮可取消)');
       await _mangaRepo.syncAllManga(
         onMangaAdded: (manga) {
           // 检查是否被取消
           if (!_isAnalyzing) return;
-          
+
           // 实时刷新UI，不阻塞页面
           if (mounted) {
             setState(() {});
@@ -247,12 +247,12 @@ class _HomePageState extends State<HomePage> {
         },
         shouldCancel: () => !_isAnalyzing,
       );
-      
+
       // 检查是否被取消
       if (!_isAnalyzing) {
         return; // 已被取消，不显示成功消息
       }
-      
+
       if (mounted) {
         _isAnalyzing = false;
         setState(() {});
@@ -262,7 +262,7 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         _isAnalyzing = false;
         setState(() {});
-        
+
         // 如果是取消操作，显示取消消息
         if (e.toString().contains('操作已取消')) {
           EasyLoading.showInfo('同步已取消');
@@ -289,7 +289,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _refreshManga(Manga manga) async {
     final mangaId = manga.mangaId;
-    
+
     // 如果正在刷新，则取消刷新
     if (_refreshingManga[mangaId] == true) {
       _refreshingManga[mangaId] = false;
@@ -299,25 +299,25 @@ class _HomePageState extends State<HomePage> {
       }
       return;
     }
-    
+
     // 开始刷新
     _refreshingManga[mangaId] = true;
     if (mounted) {
       setState(() {}); // 刷新UI显示刷新状态
     }
-    
+
     try {
       EasyLoading.show(status: '刷新中... (点击刷新按钮可取消)');
       await _mangaRepo.refreshMangaById(
         mangaId,
         shouldCancel: () => _refreshingManga[mangaId] == false,
       );
-      
+
       // 检查是否被取消
       if (_refreshingManga[mangaId] == false) {
         return; // 已被取消，不显示成功消息
       }
-      
+
       if (mounted) {
         _refreshingManga[mangaId] = false;
         setState(() {}); // 刷新UI
@@ -327,7 +327,7 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         _refreshingManga[mangaId] = false;
         setState(() {}); // 刷新UI
-        
+
         // 如果是取消操作，显示取消消息
         if (e.toString().contains('操作已取消')) {
           EasyLoading.showInfo('刷新已取消');
@@ -365,14 +365,11 @@ class _HomePageState extends State<HomePage> {
         final manga = await isar.mangas.get(localId);
         if (manga == null) continue;
         // 确保章节已同步
-        await _mangaRepo.syncChaptersFor(manga.mangaId);
+        await _mangaRepo.syncChaptersFor(manga);
         // 加载章节并下载
         await manga.chapters.load();
         for (final c in manga.chapters) {
           await _downloadService.downloadChapter(c, savePath);
-          await isar.writeTxn(() async {
-            await isar.chapters.put(c);
-          });
         }
         // 如果所有章节完成，更新漫画标记
         final allDone = manga.chapters.every((c) => c.isDownloaded);
@@ -404,7 +401,7 @@ class _HomePageState extends State<HomePage> {
           ),
           IconButton(
             onPressed: _onAnalyze,
-            icon: _isAnalyzing 
+            icon: _isAnalyzing
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -466,7 +463,7 @@ class _HomePageState extends State<HomePage> {
                           final totalCount = countSnap.data ?? 0;
                           final totalPages = (totalCount / _pageSize).ceil();
                           final currentPage = _page + 1;
-                          
+
                           return Column(
                             children: [
                               // 统计信息显示
