@@ -106,9 +106,12 @@ class MangaRepository {
         m.localPath = exist.localPath;
         m.isDownloaded = exist.isDownloaded;
         m.isFavorite = exist.isFavorite; // 保持收藏状态
+        m.coverLocalPath = exist.coverLocalPath;
       }
       await isar.mangas.put(m);
     });
+    // 立即下载封面
+    await _ensureCoverDownloaded(m);
     return m;
   }
 

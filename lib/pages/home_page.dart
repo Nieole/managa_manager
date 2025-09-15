@@ -91,9 +91,47 @@ class _HomePageState extends State<HomePage> {
         }
         final file = snap.data;
         if (file != null) {
-          return Image.file(file, width: 60, height: 80, fit: BoxFit.cover);
+          return FittedBox(
+            fit: BoxFit.contain,
+            child: Image.file(file),
+          );
         }
         return box;
+      },
+    );
+  }
+
+  void _openCoverPreview(BuildContext context, Manga m) async {
+    File? file;
+    if (m.coverLocalPath.isNotEmpty && await File(m.coverLocalPath).exists()) {
+      file = File(m.coverLocalPath);
+    } else {
+      // 尝试下载
+      await _mangaRepo.refreshMangaById(m.mangaId);
+      if (m.coverLocalPath.isNotEmpty && await File(m.coverLocalPath).exists()) {
+        file = File(m.coverLocalPath);
+      }
+    }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: file != null
+              ? InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 5,
+                  child: Image.file(file),
+                )
+              : SizedBox(
+                  width: 300,
+                  height: 400,
+                  child: Center(
+                    child: Text('未找到封面', style: Theme.of(context).textTheme.bodyLarge),
+                  ),
+                ),
+        );
       },
     );
   }
@@ -468,9 +506,12 @@ class _HomePageState extends State<HomePage> {
                                                   });
                                                 },
                                               )
-                                            : ClipRRect(
-                                                borderRadius: BorderRadius.circular(8),
-                                                child: _buildCover(context, m),
+                                            : GestureDetector(
+                                                onTap: () => _openCoverPreview(context, m),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  child: _buildCover(context, m),
+                                                ),
                                               ),
                                         title: Text(
                                           m.title.isEmpty ? m.mangaId : m.title,
