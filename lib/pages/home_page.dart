@@ -60,6 +60,17 @@ class _HomePageState extends State<HomePage> {
         .findAll();
   }
 
+  Future<int> _getTotalCount(Isar isar) async {
+    final filterText = _searchController.text.trim();
+    if (filterText.isEmpty) {
+      return await isar.mangas.count();
+    }
+    return await isar.mangas
+        .filter()
+        .titleContains(filterText, caseSensitive: false)
+        .count();
+  }
+
   Future<void> _onPickPath() async {
     final picked = await PathService.pickDirectory();
     if (picked == null) return;
@@ -189,6 +200,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               onSubmitted: (_) => setState(() => _page = 0),
+              onChanged: (_) => setState(() => _page = 0), // 实时搜索时重置页码
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -209,75 +221,99 @@ class _HomePageState extends State<HomePage> {
                       if (items.isEmpty) {
                         return const Center(child: Text('暂无数据'));
                       }
-                      return Column(
-                        children: [
-                          Expanded(
-                            child: ListView.separated(
-                              itemCount: items.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final m = items[index];
-                                final selected = _selectedIds.contains(m.id);
-                                return ListTile(
-                                  leading: _selectionMode
-                                      ? Checkbox(
-                                          value: selected,
-                                          onChanged: (v) {
-                                            setState(() {
-                                              if (v == true) {
-                                                _selectedIds.add(m.id);
-                                              } else {
-                                                _selectedIds.remove(m.id);
-                                              }
-                                            });
-                                          },
-                                        )
-                                      : null,
-                                  title: Text(m.title.isEmpty ? m.mangaId : m.title),
-                                  subtitle: Text(m.description, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => MangaDetailPage(mangaId: m.id)),
+                      return FutureBuilder<int>(
+                        future: _getTotalCount(isar),
+                        builder: (context, countSnap) {
+                          final totalCount = countSnap.data ?? 0;
+                          final totalPages = (totalCount / _pageSize).ceil();
+                          final currentPage = _page + 1;
+                          
+                          return Column(
+                            children: [
+                              // 统计信息显示
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surfaceVariant,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '共 $totalCount 条记录，第 $currentPage / $totalPages 页',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: ListView.separated(
+                                  itemCount: items.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final m = items[index];
+                                    final selected = _selectedIds.contains(m.id);
+                                    return ListTile(
+                                      leading: _selectionMode
+                                          ? Checkbox(
+                                              value: selected,
+                                              onChanged: (v) {
+                                                setState(() {
+                                                  if (v == true) {
+                                                    _selectedIds.add(m.id);
+                                                  } else {
+                                                    _selectedIds.remove(m.id);
+                                                  }
+                                                });
+                                              },
+                                            )
+                                          : null,
+                                      title: Text(m.title.isEmpty ? m.mangaId : m.title),
+                                      subtitle: Text(m.description, maxLines: 2, overflow: TextOverflow.ellipsis),
+                                      trailing: const Icon(Icons.chevron_right),
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (_) => MangaDetailPage(mangaId: m.id)),
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
-                            ),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('第 ${_page + 1} 页'),
-                              Row(
-                                children: [
-                                  TextButton(
-                                    onPressed: _page > 0
-                                        ? () => setState(() => _page -= 1)
-                                        : null,
-                                    child: const Text('上一页'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  TextButton(
-                                    onPressed: items.length == _pageSize
-                                        ? () => setState(() => _page += 1)
-                                        : null,
-                                    child: const Text('下一页'),
-                                  ),
-                                ],
-                              )
-                            ],
-                          ),
-                          if (_selectionMode)
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: _downloadSelected,
-                                icon: const Icon(Icons.download),
-                                label: Text('下载选中（${_selectedIds.length}）'),
+                                ),
                               ),
-                            ),
-                        ],
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('第 $currentPage 页'),
+                                  Row(
+                                    children: [
+                                      TextButton(
+                                        onPressed: _page > 0
+                                            ? () => setState(() => _page -= 1)
+                                            : null,
+                                        child: const Text('上一页'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      TextButton(
+                                        onPressed: currentPage < totalPages
+                                            ? () => setState(() => _page += 1)
+                                            : null,
+                                        child: const Text('下一页'),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                              if (_selectionMode)
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _downloadSelected,
+                                    icon: const Icon(Icons.download),
+                                    label: Text('下载选中（${_selectedIds.length}）'),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       );
                     },
                   );
