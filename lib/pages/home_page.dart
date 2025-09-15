@@ -370,6 +370,9 @@ class _HomePageState extends State<HomePage> {
         await manga.chapters.load();
         for (final c in manga.chapters) {
           await _downloadService.downloadChapter(c, savePath);
+          await isar.writeTxn(() async {
+            await isar.chapters.put(c);
+          });
         }
         // 如果所有章节完成，更新漫画标记
         final allDone = manga.chapters.every((c) => c.isDownloaded);
