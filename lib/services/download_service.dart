@@ -52,7 +52,7 @@ class DownloadService {
       // 若文件已存在则跳过下载并推进进度
       final f = File(saveFile);
       if (await f.exists()) {
-        chapter.downloadedPages = i + 1;
+        chapter.downloadedPages += 1;
         continue;
       }
       try {
@@ -64,7 +64,7 @@ class DownloadService {
           ),
         );
       } catch (_) {}
-      chapter.downloadedPages = i + 1;
+      chapter.downloadedPages += 1;
     }
     chapter.isDownloaded = chapter.totalPages > 0 && chapter.downloadedPages >= chapter.totalPages;
   }

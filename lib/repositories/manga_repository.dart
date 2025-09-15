@@ -99,6 +99,7 @@ class MangaRepository {
     
     final m = _mapComicToManga(comic)..mangaId = comic.id;
     
+    bool needSyncChapters = false;
     await isar.writeTxn(() async {
       final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
       if (exist != null) {
@@ -107,11 +108,21 @@ class MangaRepository {
         m.isDownloaded = exist.isDownloaded;
         m.isFavorite = exist.isFavorite; // 保持收藏状态
         m.coverLocalPath = exist.coverLocalPath;
+        // 若更新时间变化则需要同步章节
+        needSyncChapters = (exist.dateUpdated != m.dateUpdated);
+      } else {
+        needSyncChapters = true; // 新漫画需要同步章节
       }
       await isar.mangas.put(m);
     });
     // 立即下载封面
     await _ensureCoverDownloaded(m);
+    // 按需同步章节与图片信息
+    if (needSyncChapters) {
+      try {
+        await syncChaptersFor(m);
+      } catch (_) {}
+    }
     return m;
   }
 
@@ -156,6 +167,7 @@ class MangaRepository {
       throw Exception('操作已取消');
     }
     
+    bool needSyncChapters = false;
     await isar.writeTxn(() async {
       final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
       if (exist != null) {
@@ -164,6 +176,10 @@ class MangaRepository {
         m.isDownloaded = exist.isDownloaded;
         m.isFavorite = exist.isFavorite; // 保持收藏状态
         m.coverLocalPath = exist.coverLocalPath;
+        // 若更新时间变化则需要同步章节
+        needSyncChapters = (exist.dateUpdated != m.dateUpdated);
+      } else {
+        needSyncChapters = true; // 新漫画需要同步章节
       }
       await isar.mangas.put(m);
     });
@@ -175,6 +191,15 @@ class MangaRepository {
       }
       await _ensureCoverDownloaded(m);
     } catch (_) {}
+    // 按需同步章节与图片信息
+    if (needSyncChapters) {
+      try {
+        if (shouldCancel != null && shouldCancel()) {
+          throw Exception('操作已取消');
+        }
+        await syncChaptersFor(m);
+      } catch (_) {}
+    }
     return m;
   }
 

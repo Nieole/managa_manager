@@ -364,8 +364,6 @@ class _HomePageState extends State<HomePage> {
       for (final localId in _selectedIds) {
         final manga = await isar.mangas.get(localId);
         if (manga == null) continue;
-        // 确保章节已同步
-        await _mangaRepo.syncChaptersFor(manga);
         // 加载章节并下载
         await manga.chapters.load();
         for (final c in manga.chapters) {
