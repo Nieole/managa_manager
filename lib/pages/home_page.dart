@@ -32,6 +32,7 @@ class _HomePageState extends State<HomePage> {
   final Set<Id> _selectedIds = {};
   bool _isAnalyzing = false;
   bool _showFavoritesOnly = false; // 是否只显示收藏
+  final Map<String, bool> _refreshingManga = {}; // 记录正在刷新的漫画
 
   @override
   void initState() {
@@ -127,33 +128,57 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _onAnalyze() async {
-    if (_isAnalyzing) return;
+    // 如果正在同步，则取消同步
+    if (_isAnalyzing) {
+      _isAnalyzing = false;
+      if (mounted) {
+        setState(() {}); // 刷新UI
+        EasyLoading.showInfo('已取消同步');
+      }
+      return;
+    }
     
+    // 开始同步
     setState(() {
       _isAnalyzing = true;
     });
     
     try {
+      EasyLoading.show(status: '同步中... (点击同步按钮可取消)');
       await _mangaRepo.syncAllManga(
         onMangaAdded: (manga) {
+          // 检查是否被取消
+          if (!_isAnalyzing) return;
+          
           // 实时刷新UI，不阻塞页面
           if (mounted) {
             setState(() {});
           }
         },
+        shouldCancel: () => !_isAnalyzing,
       );
+      
+      // 检查是否被取消
+      if (!_isAnalyzing) {
+        return; // 已被取消，不显示成功消息
+      }
+      
       if (mounted) {
+        _isAnalyzing = false;
+        setState(() {});
         EasyLoading.showSuccess('同步完成');
       }
     } catch (e) {
       if (mounted) {
-        EasyLoading.showError('同步失败: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isAnalyzing = false;
-        });
+        _isAnalyzing = false;
+        setState(() {});
+        
+        // 如果是取消操作，显示取消消息
+        if (e.toString().contains('操作已取消')) {
+          EasyLoading.showInfo('同步已取消');
+        } else {
+          EasyLoading.showError('同步失败: $e');
+        }
       }
     }
   }
@@ -173,16 +198,52 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refreshManga(Manga manga) async {
-    try {
-      EasyLoading.show(status: '刷新中...');
-      await _mangaRepo.refreshMangaById(manga.mangaId);
+    final mangaId = manga.mangaId;
+    
+    // 如果正在刷新，则取消刷新
+    if (_refreshingManga[mangaId] == true) {
+      _refreshingManga[mangaId] = false;
       if (mounted) {
+        setState(() {}); // 刷新UI
+        EasyLoading.showInfo('已取消刷新');
+      }
+      return;
+    }
+    
+    // 开始刷新
+    _refreshingManga[mangaId] = true;
+    if (mounted) {
+      setState(() {}); // 刷新UI显示刷新状态
+    }
+    
+    try {
+      EasyLoading.show(status: '刷新中... (点击刷新按钮可取消)');
+      await _mangaRepo.refreshMangaById(
+        mangaId,
+        shouldCancel: () => _refreshingManga[mangaId] == false,
+      );
+      
+      // 检查是否被取消
+      if (_refreshingManga[mangaId] == false) {
+        return; // 已被取消，不显示成功消息
+      }
+      
+      if (mounted) {
+        _refreshingManga[mangaId] = false;
         setState(() {}); // 刷新UI
         EasyLoading.showSuccess('刷新成功');
       }
     } catch (e) {
       if (mounted) {
-        EasyLoading.showError('刷新失败: $e');
+        _refreshingManga[mangaId] = false;
+        setState(() {}); // 刷新UI
+        
+        // 如果是取消操作，显示取消消息
+        if (e.toString().contains('操作已取消')) {
+          EasyLoading.showInfo('刷新已取消');
+        } else {
+          EasyLoading.showError('刷新失败: $e');
+        }
       }
     }
   }
@@ -252,7 +313,7 @@ class _HomePageState extends State<HomePage> {
             tooltip: '设置保存路径',
           ),
           IconButton(
-            onPressed: _isAnalyzing ? null : _onAnalyze,
+            onPressed: _onAnalyze,
             icon: _isAnalyzing 
                 ? const SizedBox(
                     width: 20,
@@ -260,7 +321,7 @@ class _HomePageState extends State<HomePage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.analytics),
-            tooltip: _isAnalyzing ? '同步中...' : '分析并同步',
+            tooltip: _isAnalyzing ? '点击取消同步' : '分析并同步',
           ),
           IconButton(
             onPressed: _toggleFavoritesFilter,
@@ -429,9 +490,17 @@ class _HomePageState extends State<HomePage> {
                                                     tooltip: m.isFavorite ? '取消收藏' : '添加收藏',
                                                   ),
                                                   IconButton(
-                                                    icon: const Icon(Icons.refresh),
+                                                    icon: _refreshingManga[m.mangaId] == true
+                                                        ? const SizedBox(
+                                                            width: 20,
+                                                            height: 20,
+                                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                                          )
+                                                        : const Icon(Icons.refresh),
                                                     onPressed: () => _refreshManga(m),
-                                                    tooltip: '刷新数据',
+                                                    tooltip: _refreshingManga[m.mangaId] == true
+                                                        ? '点击取消刷新'
+                                                        : '刷新数据',
                                                   ),
                                                   const Icon(Icons.chevron_right),
                                                 ],

@@ -16,14 +16,25 @@ class MangaRepository {
 
   // 使用生成的 GraphQL 代码
 
-  Future<void> syncAllManga({int startId = 1, Function(Manga)? onMangaAdded}) async {
+  Future<void> syncAllManga({int startId = 1, Function(Manga)? onMangaAdded, bool Function()? shouldCancel}) async {
     int comicId = startId;
     int consecutiveNotFoundCount = 0;
     const int maxConsecutiveNotFound = 10;
     
     while (true) {
+      // 检查是否应该取消
+      if (shouldCancel != null && shouldCancel()) {
+        throw Exception('操作已取消');
+      }
+      
       try {
         final manga = await fetchAndUpsertComicById(comicId.toString());
+        
+        // 检查是否应该取消
+        if (shouldCancel != null && shouldCancel()) {
+          throw Exception('操作已取消');
+        }
+        
         if (manga == null) {
           // 如果返回 null，说明该 ID 不存在，继续下一个
           comicId++;
@@ -35,6 +46,11 @@ class MangaRepository {
         comicId++;
       } catch (e) {
         final errorMessage = e.toString();
+        
+        // 检查是否是取消操作
+        if (errorMessage.contains('操作已取消')) {
+          throw e; // 重新抛出取消异常
+        }
         
         // 检查是否是"no rows in result set"错误
         if (errorMessage.contains('sql: no rows in result set') || 
@@ -93,8 +109,57 @@ class MangaRepository {
   }
 
   // 刷新单条漫画数据
-  Future<Manga?> refreshMangaById(String mangaId) async {
-    return await fetchAndUpsertComicById(mangaId);
+  Future<Manga?> refreshMangaById(String mangaId, {bool Function()? shouldCancel}) async {
+    final isar = await IsarService.getInstance();
+    
+    // 检查是否应该取消
+    if (shouldCancel != null && shouldCancel()) {
+      throw Exception('操作已取消');
+    }
+    
+    final options = Options$Query$ComicById(
+      variables: Variables$Query$ComicById(comicId: mangaId),
+    );
+    
+    // 检查是否应该取消
+    if (shouldCancel != null && shouldCancel()) {
+      throw Exception('操作已取消');
+    }
+    
+    final result = await _client.query$ComicById(options);
+    
+    // 检查是否应该取消
+    if (shouldCancel != null && shouldCancel()) {
+      throw Exception('操作已取消');
+    }
+    
+    if (result.hasException) {
+      throw Exception('GraphQL error: ${result.exception}');
+    }
+    
+    final data = result.parsedData;
+    if (data == null) return null;
+    final comic = data.comicById;
+    if (comic == null) return null;
+    
+    final m = _mapComicToManga(comic)..mangaId = comic.id;
+    
+    // 检查是否应该取消
+    if (shouldCancel != null && shouldCancel()) {
+      throw Exception('操作已取消');
+    }
+    
+    await isar.writeTxn(() async {
+      final exist = await isar.mangas.filter().mangaIdEqualTo(m.mangaId).findFirst();
+      if (exist != null) {
+        m.id = exist.id;
+        m.localPath = exist.localPath;
+        m.isDownloaded = exist.isDownloaded;
+        m.isFavorite = exist.isFavorite; // 保持收藏状态
+      }
+      await isar.mangas.put(m);
+    });
+    return m;
   }
 
   // 切换收藏状态
