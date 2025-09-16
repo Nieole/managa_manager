@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:isar/isar.dart';
 import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:managa_manager/models/chapter.dart';
 
 import '../models/manga.dart';
@@ -12,8 +11,6 @@ import '../services/download_service.dart';
 import '../services/isar_service.dart';
 import '../services/path_service.dart';
 import 'manga_detail_page.dart';
-import '../repositories/settings_repository.dart';
-import '../services/download_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -36,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   bool _isAnalyzing = false;
   bool _showFavoritesOnly = false; // 是否只显示收藏
   final Map<String, bool> _refreshingManga = {}; // 记录正在刷新的漫画
+  int? _currentSyncId;
 
   @override
   void initState() {
@@ -234,16 +232,16 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      EasyLoading.show(status: '同步中... (点击同步按钮可取消)');
       await _mangaRepo.syncAllManga(
         onMangaAdded: (manga) {
-          // 检查是否被取消
           if (!_isAnalyzing) return;
-
-          // 实时刷新UI，不阻塞页面
-          if (mounted) {
-            setState(() {});
-          }
+          if (mounted) setState(() {});
+        },
+        onProgress: (id) {
+          if (!_isAnalyzing) return;
+          setState(() {
+            _currentSyncId = id;
+          });
         },
         shouldCancel: () => !_isAnalyzing,
       );
@@ -255,20 +253,16 @@ class _HomePageState extends State<HomePage> {
 
       if (mounted) {
         _isAnalyzing = false;
-        setState(() {});
-        EasyLoading.showSuccess('同步完成');
+        setState(() {
+          _currentSyncId = null;
+        });
       }
     } catch (e) {
       if (mounted) {
         _isAnalyzing = false;
-        setState(() {});
-
-        // 如果是取消操作，显示取消消息
-        if (e.toString().contains('操作已取消')) {
-          EasyLoading.showInfo('同步已取消');
-        } else {
-          EasyLoading.showError('同步失败: $e');
-        }
+        setState(() {
+          _currentSyncId = null;
+        });
       }
     }
   }
@@ -427,6 +421,38 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
+            if (_isAnalyzing)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _currentSyncId == null
+                            ? '正在同步...'
+                            : '正在同步漫画ID: $_currentSyncId',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _onAnalyze,
+                      child: const Text('取消'),
+                    ),
+                  ],
+                ),
+              ),
             TextField(
               controller: _searchController,
               decoration: InputDecoration(

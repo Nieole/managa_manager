@@ -30,6 +30,7 @@ class MangaRepository {
     int startId = 1,
     Function(Manga)? onMangaAdded,
     bool Function()? shouldCancel,
+    void Function(int currentId)? onProgress,
   }) async {
     int comicId = startId;
     int consecutiveNotFoundCount = 0;
@@ -40,6 +41,8 @@ class MangaRepository {
       if (shouldCancel != null && shouldCancel()) {
         throw Exception('操作已取消');
       }
+
+      onProgress?.call(comicId);
 
       try {
         final manga = await fetchAndUpsertComicById(comicId.toString());
@@ -398,7 +401,6 @@ class MangaRepository {
     final data = result.parsedData;
     if (data == null) return null;
     final downloadUrl = data.getDownloadChapterUrl;
-    if (downloadUrl == null) return null;
     final url = downloadUrl.url;
     return (url != null && url.isNotEmpty) ? url : null;
   }
