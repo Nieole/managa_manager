@@ -241,9 +241,15 @@ class DownloadTaskService {
     final isar = await IsarService.getInstance();
     final allTasks = await isar.downloadTasks
         .where()
-        .sortByMangaId()
-        .thenByCreatedAt()
+        .sortByCreatedAt()
         .findAll();
+    
+    // 按数字排序mangaId
+    allTasks.sort((a, b) {
+      final aId = int.tryParse(a.mangaId) ?? 0;
+      final bId = int.tryParse(b.mangaId) ?? 0;
+      return aId.compareTo(bId);
+    });
     
     final groupedTasks = <String, List<DownloadTask>>{};
     for (final task in allTasks) {

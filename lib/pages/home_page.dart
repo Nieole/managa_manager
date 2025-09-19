@@ -185,8 +185,12 @@ class _HomePageState extends State<HomePage> {
       allMangas = downloadedMangas;
     }
 
-    // 排序并分页
-    allMangas.sort((a, b) => a.mangaId.compareTo(b.mangaId));
+    // 排序并分页（按数字排序mangaId）
+    allMangas.sort((a, b) {
+      final aId = int.tryParse(a.mangaId) ?? 0;
+      final bId = int.tryParse(b.mangaId) ?? 0;
+      return aId.compareTo(bId);
+    });
     final startIndex = _page * _pageSize;
     final endIndex = (startIndex + _pageSize).clamp(0, allMangas.length);
     return allMangas.sublist(startIndex, endIndex);
@@ -345,7 +349,13 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final isar = await _isarFuture;
-      final allMangas = await isar.mangas.where().sortByMangaId().findAll();
+      final allMangas = await isar.mangas.where().findAll();
+      // 按数字排序mangaId
+      allMangas.sort((a, b) {
+        final aId = int.tryParse(a.mangaId) ?? 0;
+        final bId = int.tryParse(b.mangaId) ?? 0;
+        return aId.compareTo(bId);
+      });
       int totalTasksAdded = 0;
       
       for (final manga in allMangas) {
