@@ -12,6 +12,7 @@ import '../services/isar_service.dart';
 import '../services/path_service.dart';
 import 'manga_detail_page.dart';
 import 'download_tasks_page.dart';
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -243,12 +244,6 @@ class _HomePageState extends State<HomePage> {
     return (totalChapters, downloadedChapters);
   }
 
-  Future<void> _onPickPath() async {
-    final picked = await PathService.pickDirectory();
-    if (picked == null) return;
-    await _settingsRepo.setSavePath(picked);
-    if (mounted) EasyLoading.showSuccess('已设置保存路径');
-  }
 
   Future<void> _onAnalyze() async {
     // 如果正在同步，则取消同步
@@ -515,9 +510,14 @@ class _HomePageState extends State<HomePage> {
         title: const Text('漫画管理'),
         actions: [
           IconButton(
-            onPressed: _onPickPath,
-            icon: const Icon(Icons.folder_open),
-            tooltip: '设置保存路径',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            },
+            icon: const Icon(Icons.settings),
+            tooltip: '设置',
           ),
           IconButton(
             onPressed: _onAnalyze,

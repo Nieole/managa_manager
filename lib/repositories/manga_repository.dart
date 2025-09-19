@@ -10,6 +10,7 @@ import '../models/manga.dart';
 import '../services/isar_service.dart';
 import '../repositories/settings_repository.dart';
 import '../services/download_service.dart';
+import '../services/http_service.dart';
 import 'package:path/path.dart' as p;
 
 class MangaRepository {
@@ -23,6 +24,7 @@ class MangaRepository {
                 ));
 
   final GraphQLClient _client;
+  final HttpService _httpService = HttpService();
 
   // 使用生成的 GraphQL 代码
 

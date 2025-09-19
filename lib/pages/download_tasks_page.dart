@@ -20,6 +20,7 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
   late Future<Isar> _isarFuture;
   final DownloadService _downloadService = DownloadService();
   final Map<String, bool> _downloadingChapters = {};
+  final Map<String, bool> _pausedChapters = {};
   final Map<String, bool> _expandedManga = {};
   final Map<String, double> _downloadProgress = {};
   final ScrollController _scrollController = ScrollController();
@@ -83,7 +84,9 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
       return;
     }
 
+    // 设置下载状态
     _downloadingChapters[chapter.chapterId] = true;
+    _pausedChapters[chapter.chapterId] = false;
     _downloadProgress[chapter.chapterId] = 0.0;
     _updateChapterProgress(chapter.chapterId);
 
@@ -96,10 +99,20 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
         chapter, 
         savePath,
         onProgress: (progress) {
+          // 检查是否被暂停
+          if (_pausedChapters[chapter.chapterId] == true) {
+            return;
+          }
           _downloadProgress[chapter.chapterId] = progress;
           _updateChapterProgress(chapter.chapterId);
         },
       );
+      
+      // 检查是否被暂停
+      if (_pausedChapters[chapter.chapterId] == true) {
+        print('章节 ${chapter.chapterId} 下载被暂停');
+        return;
+      }
       
       // 验证下载是否成功
       if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
@@ -124,9 +137,24 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
       print('下载章节 ${chapter.chapterId} 失败: $e');
     } finally {
       _downloadingChapters[chapter.chapterId] = false;
+      _pausedChapters[chapter.chapterId] = false;
       _downloadProgress.remove(chapter.chapterId);
       _updateChapterProgress(chapter.chapterId);
     }
+  }
+
+  void _pauseChapter(Chapter chapter) {
+    setState(() {
+      _pausedChapters[chapter.chapterId] = true;
+    });
+    _updateChapterProgress(chapter.chapterId);
+  }
+
+  void _resumeChapter(Chapter chapter) {
+    setState(() {
+      _pausedChapters[chapter.chapterId] = false;
+    });
+    _updateChapterProgress(chapter.chapterId);
   }
 
   void _updateChapterProgress(String chapterId) {
@@ -157,10 +185,12 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
 
   Widget _buildChapterItem(Chapter chapter) {
     final isDownloading = _downloadingChapters[chapter.chapterId] == true;
+    final isPaused = _pausedChapters[chapter.chapterId] == true;
     final progress = _downloadProgress[chapter.chapterId] ?? 
         (chapter.totalPages > 0 ? chapter.downloadedPages / chapter.totalPages : 0.0);
     final isCompleted = chapter.isDownloaded;
-    final isFailed = !isCompleted && chapter.totalPages > 0 && chapter.downloadedPages > 0;
+    // 修复状态判断逻辑：只有在下载失败且不在下载中时才显示为失败状态
+    final isFailed = !isCompleted && !isDownloading && chapter.totalPages > 0 && chapter.downloadedPages > 0;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -171,21 +201,23 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
               : isFailed 
                   ? Colors.red 
                   : isDownloading 
-                      ? Colors.blue 
+                      ? (isPaused ? Colors.orange : Colors.blue)
                       : Colors.grey,
           child: isCompleted
               ? const Icon(Icons.check, color: Colors.white)
               : isFailed
                   ? const Icon(Icons.error, color: Colors.white)
                   : isDownloading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
+                      ? (isPaused 
+                          ? const Icon(Icons.pause, color: Colors.white)
+                          : const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ))
                       : const Icon(Icons.download, color: Colors.white),
         ),
         title: Text(
@@ -203,7 +235,7 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                 value: progress,
                 backgroundColor: Colors.grey[300],
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  isFailed ? Colors.red : Colors.blue,
+                  isFailed ? Colors.red : (isPaused ? Colors.orange : Colors.blue),
                 ),
               ),
             const SizedBox(height: 4),
@@ -213,7 +245,9 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                   : isFailed
                       ? '下载失败 (${chapter.downloadedPages}/${chapter.totalPages})'
                       : isDownloading
-                          ? '下载中... (${chapter.downloadedPages}/${chapter.totalPages})'
+                          ? (isPaused 
+                              ? '已暂停 (${chapter.downloadedPages}/${chapter.totalPages})'
+                              : '下载中... (${chapter.downloadedPages}/${chapter.totalPages})')
                           : '未开始 (0/${chapter.totalPages})',
               style: TextStyle(
                 fontSize: 12,
@@ -224,13 +258,37 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
         ),
         trailing: isCompleted
             ? null
-            : IconButton(
-                icon: Icon(
-                  isFailed ? Icons.refresh : Icons.play_arrow,
-                  color: isFailed ? Colors.red : Colors.blue,
-                ),
-                onPressed: isDownloading ? null : () => _downloadChapter(chapter),
-                tooltip: isFailed ? '重试下载' : '开始下载',
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isDownloading) ...[
+                    // 下载中时显示暂停按钮
+                    IconButton(
+                      icon: Icon(
+                        isPaused ? Icons.play_arrow : Icons.pause,
+                        color: isPaused ? Colors.green : Colors.orange,
+                      ),
+                      onPressed: () {
+                        if (isPaused) {
+                          _resumeChapter(chapter);
+                        } else {
+                          _pauseChapter(chapter);
+                        }
+                      },
+                      tooltip: isPaused ? '继续下载' : '暂停下载',
+                    ),
+                  ] else ...[
+                    // 未下载时显示开始/重试按钮
+                    IconButton(
+                      icon: Icon(
+                        isFailed ? Icons.refresh : Icons.play_arrow,
+                        color: isFailed ? Colors.red : Colors.blue,
+                      ),
+                      onPressed: () => _downloadChapter(chapter),
+                      tooltip: isFailed ? '重试下载' : '开始下载',
+                    ),
+                  ],
+                ],
               ),
       ),
     );

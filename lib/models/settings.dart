@@ -6,8 +6,9 @@ part 'settings.g.dart';
 class Settings {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true,replace: true)
-  String key = "";
-
-  String value = "";
+  String savePath = "";
+  String email = "";
+  String password = "";
+  String token = "";
+  String expire = "";
 }

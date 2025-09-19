@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/chapter.dart';
+import '../services/http_service.dart';
 
 class DownloadService {
   DownloadService({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
+  final HttpService _httpService = HttpService();
 
   Future<void> ensureDir(String dir) async {
     final d = Directory(dir);
@@ -60,7 +62,8 @@ class DownloadService {
         continue;
       }
       try {
-        await _dio.download(
+        final dio = await _httpService.getAuthenticatedDio();
+        await dio.download(
           "https://komiic.com/api/image/${img.kid}",
           saveFile,
           options: Options(
