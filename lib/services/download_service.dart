@@ -17,7 +17,7 @@ class DownloadService {
     }
   }
 
-  Future<void> downloadChapter(Chapter chapter, String baseDir) async {
+  Future<void> downloadChapter(Chapter chapter, String baseDir, {Function(double)? onProgress}) async {
     if(chapter.isDownloaded){
       return;
     }
@@ -66,6 +66,10 @@ class DownloadService {
         // 验证文件是否真的下载成功
         if (await f.exists() && await f.length() > 0) {
           chapter.downloadedPages += 1;
+          // 报告进度
+          if (onProgress != null) {
+            onProgress(chapter.downloadedPages / chapter.totalPages);
+          }
         }
       } catch (e) {
         print('下载图片失败: ${img.kid}, 错误: $e');

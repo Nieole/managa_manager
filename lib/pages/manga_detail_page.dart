@@ -24,6 +24,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   bool _selectionMode = false;
   final Set<Id> _selectedChapterIds = {};
   final Map<String, bool> _downloadingChapters = {};
+  List<Chapter> _currentChapters = [];
 
   @override
   void initState() {
@@ -44,6 +45,26 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
     });
   }
 
+  void _selectAllChapters(List<Chapter> chapters) {
+    setState(() {
+      _selectedChapterIds.clear();
+      for (final chapter in chapters) {
+        _selectedChapterIds.add(chapter.id);
+      }
+    });
+  }
+
+  void _selectUndownloadedChapters(List<Chapter> chapters) {
+    setState(() {
+      _selectedChapterIds.clear();
+      for (final chapter in chapters) {
+        if (!chapter.isDownloaded && chapter.totalPages > 0) {
+          _selectedChapterIds.add(chapter.id);
+        }
+      }
+    });
+  }
+
   Future<void> _downloadSelectedChapters() async {
     if (_selectedChapterIds.isEmpty) return;
     
@@ -53,7 +74,6 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       return;
     }
 
-    EasyLoading.show(status: '准备下载...');
     final downloadService = DownloadService();
     final isar = await _isarFuture;
     
@@ -87,11 +107,16 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
         }
       }
       
-      EasyLoading.showSuccess('下载完成');
+      // 下载完成后刷新UI，但不显示遮罩
+      if (mounted) {
+        setState(() {});
+        // 通知父页面刷新数据
+        Navigator.of(context).pop(true); // 返回true表示需要刷新
+      }
     } catch (e) {
-      EasyLoading.showError('下载失败: $e');
-    } finally {
-      EasyLoading.dismiss();
+      if (mounted) {
+        EasyLoading.showError('下载失败: $e');
+      }
     }
   }
 
@@ -100,6 +125,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
     if (manga == null) return (null, <Chapter>[]);
     await manga.chapters.load();
     final chapters = manga.chapters.toList()..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    _currentChapters = chapters; // 保存当前章节列表
     return (manga, chapters);
   }
 
@@ -143,6 +169,42 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
         title: Text(_selectionMode ? '选择章节 (${_selectedChapterIds.length})' : '漫画详情'),
         actions: [
           if (_selectionMode) ...[
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'select_all':
+                    _selectAllChapters(_currentChapters);
+                    break;
+                  case 'select_undownloaded':
+                    _selectUndownloadedChapters(_currentChapters);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'select_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.select_all),
+                      SizedBox(width: 8),
+                      Text('全选章节'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'select_undownloaded',
+                  child: Row(
+                    children: [
+                      Icon(Icons.download),
+                      SizedBox(width: 8),
+                      Text('选择未下载'),
+                    ],
+                  ),
+                ),
+              ],
+              icon: const Icon(Icons.more_vert),
+              tooltip: '选择选项',
+            ),
             IconButton(
               onPressed: _downloadSelectedChapters,
               icon: const Icon(Icons.download),

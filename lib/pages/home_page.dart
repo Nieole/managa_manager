@@ -11,6 +11,7 @@ import '../services/download_service.dart';
 import '../services/isar_service.dart';
 import '../services/path_service.dart';
 import 'manga_detail_page.dart';
+import 'download_tasks_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -551,6 +552,15 @@ class _HomePageState extends State<HomePage> {
             tooltip: _isAutoDownloading ? '点击取消自动下载' : '自动下载未完成章节',
           ),
           IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DownloadTasksPage()),
+              );
+            },
+            icon: const Icon(Icons.download_for_offline),
+            tooltip: '下载任务管理',
+          ),
+          IconButton(
             onPressed: _toggleSelection,
             icon: Icon(_selectionMode ? Icons.check_box : Icons.check_box_outlined),
             tooltip: '批量选择',
@@ -837,11 +847,15 @@ class _HomePageState extends State<HomePage> {
                                                   const Icon(Icons.chevron_right),
                                                 ],
                                               ),
-                                        onTap: () {
+                                        onTap: () async {
                                           if (!_selectionMode) {
-                                            Navigator.of(context).push(
+                                            final result = await Navigator.of(context).push(
                                               MaterialPageRoute(builder: (_) => MangaDetailPage(mangaId: m.id)),
                                             );
+                                            // 如果返回true，表示需要刷新数据
+                                            if (result == true && mounted) {
+                                              setState(() {});
+                                            }
                                           }
                                         },
                                       ),
