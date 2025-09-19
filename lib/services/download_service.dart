@@ -63,10 +63,41 @@ class DownloadService {
             headers: {'referer': referer},
           ),
         );
-      } catch (_) {}
-      chapter.downloadedPages += 1;
+        // 验证文件是否真的下载成功
+        if (await f.exists() && await f.length() > 0) {
+          chapter.downloadedPages += 1;
+        }
+      } catch (e) {
+        print('下载图片失败: ${img.kid}, 错误: $e');
+        // 下载失败时不增加计数
+      }
     }
-    chapter.isDownloaded = chapter.totalPages > 0 && chapter.downloadedPages >= chapter.totalPages;
+    // 最终验证：检查所有图片文件是否都存在且大小大于0
+    await _verifyChapterDownload(chapter);
+  }
+
+  /// 验证章节下载完整性
+  Future<void> _verifyChapterDownload(Chapter chapter) async {
+    if (chapter.localPath.isEmpty || chapter.totalPages == 0) {
+      chapter.isDownloaded = false;
+      return;
+    }
+
+    int actualDownloadedCount = 0;
+    for (int i = 0; i < chapter.totalPages; i++) {
+      final img = i < chapter.images.length ? chapter.images[i] : null;
+      if (img == null) continue;
+      
+      final filePath = p.join(chapter.localPath, '${img.orderNumber}.jpg');
+      final file = File(filePath);
+      
+      if (await file.exists() && await file.length() > 0) {
+        actualDownloadedCount++;
+      }
+    }
+    
+    chapter.downloadedPages = actualDownloadedCount;
+    chapter.isDownloaded = actualDownloadedCount >= chapter.totalPages;
   }
 
   /// 通用文件下载

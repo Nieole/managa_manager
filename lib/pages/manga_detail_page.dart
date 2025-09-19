@@ -7,6 +7,8 @@ import '../models/chapter.dart';
 import '../models/manga.dart';
 import '../services/isar_service.dart';
 import '../repositories/manga_repository.dart';
+import '../repositories/settings_repository.dart';
+import '../services/download_service.dart';
 
 class MangaDetailPage extends StatefulWidget {
   const MangaDetailPage({super.key, required this.mangaId});
@@ -19,6 +21,9 @@ class MangaDetailPage extends StatefulWidget {
 class _MangaDetailPageState extends State<MangaDetailPage> {
   late Future<Isar> _isarFuture;
   late MangaRepository _repo;
+  bool _selectionMode = false;
+  final Set<Id> _selectedChapterIds = {};
+  final Map<String, bool> _downloadingChapters = {};
 
   @override
   void initState() {
@@ -30,6 +35,64 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _repo = MangaRepository(context: context);
+  }
+
+  void _toggleSelection() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) _selectedChapterIds.clear();
+    });
+  }
+
+  Future<void> _downloadSelectedChapters() async {
+    if (_selectedChapterIds.isEmpty) return;
+    
+    final savePath = await SettingsRepository().getSavePath();
+    if (savePath == null || savePath.isEmpty) {
+      EasyLoading.showInfo('请先设置保存路径');
+      return;
+    }
+
+    EasyLoading.show(status: '准备下载...');
+    final downloadService = DownloadService();
+    final isar = await _isarFuture;
+    
+    try {
+      for (final chapterId in _selectedChapterIds) {
+        final chapter = await isar.chapters.get(chapterId);
+        if (chapter == null) continue;
+        
+        _downloadingChapters[chapter.chapterId] = true;
+        if (mounted) setState(() {});
+        
+        try {
+          // 重新下载章节
+          chapter.downloadedPages = 0;
+          chapter.isDownloaded = false;
+          await downloadService.downloadChapter(chapter, savePath);
+          
+          // 验证下载是否成功
+          if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
+            chapter.isDownloaded = true;
+          }
+          
+          await isar.writeTxn(() async {
+            await isar.chapters.put(chapter);
+          });
+        } catch (e) {
+          print('下载章节 ${chapter.chapterId} 失败: $e');
+        } finally {
+          _downloadingChapters[chapter.chapterId] = false;
+          if (mounted) setState(() {});
+        }
+      }
+      
+      EasyLoading.showSuccess('下载完成');
+    } catch (e) {
+      EasyLoading.showError('下载失败: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   Future<(Manga?, List<Chapter>)> _load(Isar isar) async {
@@ -77,26 +140,44 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('漫画详情'),
+        title: Text(_selectionMode ? '选择章节 (${_selectedChapterIds.length})' : '漫画详情'),
         actions: [
-          IconButton(
-            onPressed: () async {
-              final isar = await _isarFuture;
-              final m = await isar.mangas.get(widget.mangaId);
-              if (m == null) return;
-              try {
-                EasyLoading.show(status: '检查更新...');
-                // 调用刷新：仓库内部会根据更新时间自动决定是否同步章节
-                await _repo.refreshMangaById(m.mangaId);
-                EasyLoading.dismiss();
-              } catch (_) {
-                EasyLoading.dismiss();
-              }
-              if (mounted) setState(() {});
-            },
-            icon: const Icon(Icons.sync),
-            tooltip: '检查并同步章节',
-          ),
+          if (_selectionMode) ...[
+            IconButton(
+              onPressed: _downloadSelectedChapters,
+              icon: const Icon(Icons.download),
+              tooltip: '下载选中章节',
+            ),
+            IconButton(
+              onPressed: _toggleSelection,
+              icon: const Icon(Icons.close),
+              tooltip: '取消选择',
+            ),
+          ] else ...[
+            IconButton(
+              onPressed: _toggleSelection,
+              icon: const Icon(Icons.checklist),
+              tooltip: '选择章节',
+            ),
+            IconButton(
+              onPressed: () async {
+                final isar = await _isarFuture;
+                final m = await isar.mangas.get(widget.mangaId);
+                if (m == null) return;
+                try {
+                  EasyLoading.show(status: '检查更新...');
+                  // 调用刷新：仓库内部会根据更新时间自动决定是否同步章节
+                  await _repo.refreshMangaById(m.mangaId);
+                  EasyLoading.dismiss();
+                } catch (_) {
+                  EasyLoading.dismiss();
+                }
+                if (mounted) setState(() {});
+              },
+              icon: const Icon(Icons.sync),
+              tooltip: '检查并同步章节',
+            ),
+          ],
         ],
       ),
       body: FutureBuilder<Isar>(
@@ -170,26 +251,81 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                         (context, index) {
                           final c = chapters[index];
                           final downloaded = c.isDownloaded;
+                          final selected = _selectedChapterIds.contains(c.id);
+                          final downloading = _downloadingChapters[c.chapterId] == true;
                           final label = c.title.isNotEmpty ? c.title : c.chapterId;
+                          
                           return InkWell(
                             borderRadius: BorderRadius.circular(8),
-                            onTap: () {},
+                            onTap: () {
+                              if (_selectionMode) {
+                                setState(() {
+                                  if (selected) {
+                                    _selectedChapterIds.remove(c.id);
+                                  } else {
+                                    _selectedChapterIds.add(c.id);
+                                  }
+                                });
+                              }
+                            },
                             child: Container(
                               decoration: BoxDecoration(
-                                color: downloaded ? Colors.green.withOpacity(0.15) : Theme.of(context).colorScheme.surface,
-                                border: Border.all(color: downloaded ? Colors.green : Colors.grey.shade300),
+                                color: selected 
+                                    ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
+                                    : (downloaded ? Colors.green.withOpacity(0.15) : Theme.of(context).colorScheme.surface),
+                                border: Border.all(
+                                  color: selected 
+                                      ? Theme.of(context).colorScheme.primary
+                                      : (downloaded ? Colors.green : Colors.grey.shade300),
+                                  width: selected ? 2 : 1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               alignment: Alignment.center,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
+                              child: Stack(
                                 children: [
-                                  if (downloaded) const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                                  if (downloaded) const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_selectionMode && selected) 
+                                        const Icon(Icons.check_circle, size: 16, color: Colors.blue),
+                                      if (_selectionMode && selected) const SizedBox(width: 4),
+                                      if (!_selectionMode && downloaded) 
+                                        const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                      if (!_selectionMode && downloaded) const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          label, 
+                                          maxLines: 1, 
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: selected ? Theme.of(context).colorScheme.primary : null,
+                                            fontWeight: selected ? FontWeight.bold : null,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                  if (downloading)
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.3),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

@@ -32,8 +32,11 @@ class _HomePageState extends State<HomePage> {
   final Set<Id> _selectedIds = {};
   bool _isAnalyzing = false;
   bool _showFavoritesOnly = false; // 是否只显示收藏
+  bool _showDownloadedOnly = false; // 是否只显示已完全下载的漫画
   final Map<String, bool> _refreshingManga = {}; // 记录正在刷新的漫画
   int? _currentSyncId;
+  bool _isAutoDownloading = false; // 是否正在自动下载
+  String? _currentDownloadMangaId; // 当前正在下载的漫画ID
 
   @override
   void initState() {
@@ -136,76 +139,107 @@ class _HomePageState extends State<HomePage> {
 
   Future<List<Manga>> _queryPage(Isar isar) async {
     final filterText = _searchController.text.trim();
+    List<Manga> allMangas = [];
 
-    // 构建查询条件
+    // 先获取所有符合条件的漫画
     if (_showFavoritesOnly && filterText.isNotEmpty) {
       // 收藏 + 搜索
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .isFavoriteEqualTo(true)
           .and()
           .titleContains(filterText, caseSensitive: false)
-          .sortByMangaId()
-          .offset(_page * _pageSize)
-          .limit(_pageSize)
           .findAll();
     } else if (_showFavoritesOnly) {
       // 仅收藏
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .isFavoriteEqualTo(true)
-          .sortByMangaId()
-          .offset(_page * _pageSize)
-          .limit(_pageSize)
           .findAll();
     } else if (filterText.isNotEmpty) {
       // 仅搜索
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .titleContains(filterText, caseSensitive: false)
-          .sortByMangaId()
-          .offset(_page * _pageSize)
-          .limit(_pageSize)
           .findAll();
     } else {
       // 全部
-      return await isar.mangas
-          .where()
-          .sortByMangaId()
-          .offset(_page * _pageSize)
-          .limit(_pageSize)
-          .findAll();
+      allMangas = await isar.mangas.where().findAll();
     }
+
+    // 如果需要筛选已下载的漫画
+    if (_showDownloadedOnly) {
+      final downloadedMangas = <Manga>[];
+      for (final manga in allMangas) {
+        await manga.chapters.load();
+        final totalChapters = manga.chapters.length;
+        final downloadedChapters = manga.chapters.where((c) => c.isDownloaded).length;
+        if (totalChapters > 0 && downloadedChapters == totalChapters) {
+          downloadedMangas.add(manga);
+        }
+      }
+      allMangas = downloadedMangas;
+    }
+
+    // 排序并分页
+    allMangas.sort((a, b) => a.mangaId.compareTo(b.mangaId));
+    final startIndex = _page * _pageSize;
+    final endIndex = (startIndex + _pageSize).clamp(0, allMangas.length);
+    return allMangas.sublist(startIndex, endIndex);
   }
 
   Future<int> _getTotalCount(Isar isar) async {
     final filterText = _searchController.text.trim();
+    List<Manga> allMangas = [];
 
-    // 构建查询条件
+    // 先获取所有符合条件的漫画
     if (_showFavoritesOnly && filterText.isNotEmpty) {
       // 收藏 + 搜索
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .isFavoriteEqualTo(true)
           .and()
           .titleContains(filterText, caseSensitive: false)
-          .count();
+          .findAll();
     } else if (_showFavoritesOnly) {
       // 仅收藏
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .isFavoriteEqualTo(true)
-          .count();
+          .findAll();
     } else if (filterText.isNotEmpty) {
       // 仅搜索
-      return await isar.mangas
+      allMangas = await isar.mangas
           .filter()
           .titleContains(filterText, caseSensitive: false)
-          .count();
+          .findAll();
     } else {
       // 全部
-      return await isar.mangas.count();
+      allMangas = await isar.mangas.where().findAll();
     }
+
+    // 如果需要筛选已下载的漫画
+    if (_showDownloadedOnly) {
+      final downloadedMangas = <Manga>[];
+      for (final manga in allMangas) {
+        await manga.chapters.load();
+        final totalChapters = manga.chapters.length;
+        final downloadedChapters = manga.chapters.where((c) => c.isDownloaded).length;
+        if (totalChapters > 0 && downloadedChapters == totalChapters) {
+          downloadedMangas.add(manga);
+        }
+      }
+      return downloadedMangas.length;
+    }
+
+    return allMangas.length;
+  }
+
+  Future<(int, int)> _getChapterStats(Isar isar, Manga manga) async {
+    await manga.chapters.load();
+    final totalChapters = manga.chapters.length;
+    final downloadedChapters = manga.chapters.where((c) => c.isDownloaded).length;
+    return (totalChapters, downloadedChapters);
   }
 
   Future<void> _onPickPath() async {
@@ -279,6 +313,96 @@ class _HomePageState extends State<HomePage> {
       _showFavoritesOnly = !_showFavoritesOnly;
       _page = 0; // 重置到第一页
     });
+  }
+
+  void _toggleDownloadedFilter() {
+    setState(() {
+      _showDownloadedOnly = !_showDownloadedOnly;
+      _page = 0; // 重置到第一页
+    });
+  }
+
+  Future<void> _startAutoDownload() async {
+    if (_isAutoDownloading) {
+      _isAutoDownloading = false;
+      if (mounted) {
+        setState(() {
+          _currentDownloadMangaId = null;
+        });
+        EasyLoading.showInfo('已取消自动下载');
+      }
+      return;
+    }
+
+    final savePath = await _settingsRepo.getSavePath();
+    if (savePath == null || savePath.isEmpty) {
+      EasyLoading.showInfo('请先设置保存路径');
+      return;
+    }
+
+    setState(() {
+      _isAutoDownloading = true;
+      _currentDownloadMangaId = null;
+    });
+
+    try {
+      final isar = await _isarFuture;
+      final allMangas = await isar.mangas.where().sortByMangaId().findAll();
+      
+      for (final manga in allMangas) {
+        if (!_isAutoDownloading) break; // 检查是否被取消
+        
+        setState(() {
+          _currentDownloadMangaId = manga.mangaId;
+        });
+
+        await manga.chapters.load();
+        final totalChapters = manga.chapters.length;
+        final downloadedChapters = manga.chapters.where((c) => c.isDownloaded).length;
+        
+        // 如果有未下载的章节，则下载
+        if (totalChapters > 0 && downloadedChapters < totalChapters) {
+          for (final chapter in manga.chapters) {
+            if (!_isAutoDownloading) break; // 检查是否被取消
+            
+            if (!chapter.isDownloaded) {
+              try {
+                await _downloadService.downloadChapter(chapter, savePath);
+                
+                // 验证下载是否成功
+                if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
+                  chapter.isDownloaded = true;
+                }
+                
+                await isar.writeTxn(() async {
+                  await isar.chapters.put(chapter);
+                });
+                
+                if (mounted) setState(() {}); // 刷新UI
+              } catch (e) {
+                print('下载章节 ${chapter.chapterId} 失败: $e');
+              }
+            }
+          }
+        }
+      }
+      
+      if (_isAutoDownloading && mounted) {
+        _isAutoDownloading = false;
+        setState(() {
+          _currentDownloadMangaId = null;
+        });
+        EasyLoading.showSuccess('自动下载完成');
+      }
+    } catch (e) {
+      if (mounted) {
+        _isAutoDownloading = false;
+        setState(() {
+          _currentDownloadMangaId = null;
+        });
+        EasyLoading.showError('自动下载失败: $e');
+      }
+    }
   }
 
   Future<void> _refreshManga(Manga manga) async {
@@ -411,6 +535,22 @@ class _HomePageState extends State<HomePage> {
             tooltip: _showFavoritesOnly ? '显示全部' : '只显示收藏',
           ),
           IconButton(
+            onPressed: _toggleDownloadedFilter,
+            icon: Icon(_showDownloadedOnly ? Icons.download_done : Icons.download_done_outlined),
+            tooltip: _showDownloadedOnly ? '显示全部' : '只显示已下载',
+          ),
+          IconButton(
+            onPressed: _startAutoDownload,
+            icon: _isAutoDownloading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_awesome),
+            tooltip: _isAutoDownloading ? '点击取消自动下载' : '自动下载未完成章节',
+          ),
+          IconButton(
             onPressed: _toggleSelection,
             icon: Icon(_selectionMode ? Icons.check_box : Icons.check_box_outlined),
             tooltip: '批量选择',
@@ -448,6 +588,38 @@ class _HomePageState extends State<HomePage> {
                     ),
                     TextButton(
                       onPressed: _onAnalyze,
+                      child: const Text('取消'),
+                    ),
+                  ],
+                ),
+              ),
+            if (_isAutoDownloading)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _currentDownloadMangaId == null
+                            ? '正在自动下载...'
+                            : '正在下载漫画ID: $_currentDownloadMangaId',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _startAutoDownload,
                       child: const Text('取消'),
                     ),
                   ],
@@ -601,7 +773,37 @@ class _HomePageState extends State<HomePage> {
                                                   Icon(Icons.visibility, size: 14, color: Colors.grey[500]),
                                                   const SizedBox(width: 4),
                                                   Text('${m.views}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                                  const SizedBox(width: 12),
                                                 ],
+                                                // 章节统计
+                                                FutureBuilder<(int, int)>(
+                                                  future: _getChapterStats(isar, m),
+                                                  builder: (context, statsSnap) {
+                                                    if (statsSnap.hasData) {
+                                                      final (total, downloaded) = statsSnap.data!;
+                                                      return Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.menu_book, size: 14, color: Colors.grey[500]),
+                                                          const SizedBox(width: 4),
+                                                          Text(
+                                                            '$downloaded/$total',
+                                                            style: TextStyle(
+                                                              fontSize: 12, 
+                                                              color: downloaded == total && total > 0 
+                                                                  ? Colors.green[600] 
+                                                                  : Colors.grey[500],
+                                                              fontWeight: downloaded == total && total > 0 
+                                                                  ? FontWeight.bold 
+                                                                  : FontWeight.normal,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    }
+                                                    return const SizedBox.shrink();
+                                                  },
+                                                ),
                                               ],
                                             ),
                                           ],
