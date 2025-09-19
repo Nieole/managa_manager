@@ -346,25 +346,42 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                               alignment: Alignment.center,
                               child: Stack(
                                 children: [
-                                  Row(
+                                  Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (_selectionMode && selected) 
-                                        const Icon(Icons.check_circle, size: 16, color: Colors.blue),
-                                      if (_selectionMode && selected) const SizedBox(width: 4),
-                                      if (!_selectionMode && downloaded) 
-                                        const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                                      if (!_selectionMode && downloaded) const SizedBox(width: 4),
-                                      Flexible(
-                                        child: Text(
-                                          label, 
-                                          maxLines: 1, 
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: selected ? Theme.of(context).colorScheme.primary : null,
-                                            fontWeight: selected ? FontWeight.bold : null,
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (_selectionMode && selected) 
+                                            const Icon(Icons.check_circle, size: 16, color: Colors.blue),
+                                          if (_selectionMode && selected) const SizedBox(width: 4),
+                                          if (!_selectionMode && downloaded) 
+                                            const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                          if (!_selectionMode && downloaded) const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              label, 
+                                              maxLines: 1, 
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: selected ? Theme.of(context).colorScheme.primary : null,
+                                                fontWeight: selected ? FontWeight.bold : null,
+                                                fontSize: 12,
+                                              ),
+                                            ),
                                           ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${c.totalPages}页',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: selected 
+                                              ? Theme.of(context).colorScheme.primary.withOpacity(0.8)
+                                              : Colors.grey[600],
                                         ),
                                       ),
                                     ],

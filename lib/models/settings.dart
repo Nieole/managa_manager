@@ -11,4 +11,5 @@ class Settings {
   String password = "";
   String token = "";
   String expire = "";
+  int maxThreads = 3; // 默认最大线程数
 }

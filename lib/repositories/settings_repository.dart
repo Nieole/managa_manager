@@ -80,6 +80,31 @@ class SettingsRepository {
       rethrow;
     }
   }
+
+  Future<int> getMaxThreads() async {
+    try {
+      final isar = await IsarService.getInstance();
+      final settings = await isar.settings.where().findFirst();
+      return settings?.maxThreads ?? 3; // 默认3个线程
+    } catch (e) {
+      print('获取线程数设置失败: $e');
+      return 3;
+    }
+  }
+
+  Future<void> setMaxThreads(int threads) async {
+    try {
+      final isar = await IsarService.getInstance();
+      final settings = await isar.settings.where().findFirst() ?? Settings();
+      settings.maxThreads = threads;
+      await isar.writeTxn(() async {
+        await isar.settings.put(settings);
+      });
+    } catch (e) {
+      print('设置线程数失败: $e');
+      rethrow;
+    }
+  }
 }
 
 

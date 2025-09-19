@@ -11,6 +11,7 @@ import '../services/isar_service.dart';
 import '../repositories/settings_repository.dart';
 import '../services/download_service.dart';
 import '../services/http_service.dart';
+import '../services/thread_service.dart';
 import 'package:path/path.dart' as p;
 
 class MangaRepository {
@@ -25,8 +26,81 @@ class MangaRepository {
 
   final GraphQLClient _client;
   final HttpService _httpService = HttpService();
+  final ThreadService _threadService = ThreadService();
 
   // 使用生成的 GraphQL 代码
+
+  /// 多线程同步所有漫画
+  Future<void> syncAllMangaParallel({
+    int startId = 1,
+    int batchSize = 10, // 改为10，与连续未找到的阈值一致
+    Function(Manga)? onMangaAdded,
+    bool Function()? shouldCancel,
+    void Function(int currentId)? onProgress,
+  }) async {
+    int comicId = startId;
+    int consecutiveNotFoundCount = 0;
+    const int maxConsecutiveNotFound = 10;
+
+    while (true) {
+      // 检查是否应该取消
+      if (shouldCancel != null && shouldCancel()) {
+        throw Exception('操作已取消');
+      }
+
+      // 准备一批ID进行并行处理
+      final batchIds = <String>[];
+      for (int i = 0; i < batchSize; i++) {
+        batchIds.add((comicId + i).toString());
+      }
+
+      // 创建并行任务
+      final tasks = batchIds.map((id) => () => fetchAndUpsertComicById(id)).toList();
+
+      try {
+        // 并行执行任务
+        final results = await _threadService.executeInParallel(
+          'sync_manga_$comicId',
+          tasks,
+          onProgress: (completed, total) {
+            onProgress?.call(comicId + completed);
+          },
+          shouldCancel: shouldCancel,
+        );
+
+        // 处理结果，按照原有逻辑逐个检查每个ID的结果
+        for (int i = 0; i < results.length; i++) {
+          final manga = results[i];
+          if (manga != null) {
+            // 找到漫画，重置连续未找到计数
+            consecutiveNotFoundCount = 0;
+            onMangaAdded?.call(manga);
+          } else {
+            // 未找到漫画，增加连续未找到计数
+            consecutiveNotFoundCount++;
+            print('ID ${comicId + i} 不存在 (连续未找到: $consecutiveNotFoundCount/$maxConsecutiveNotFound)');
+            
+            // 如果连续未找到的数量达到阈值，停止同步
+            if (consecutiveNotFoundCount >= maxConsecutiveNotFound) {
+              print('连续 $maxConsecutiveNotFound 个ID未找到，停止同步');
+              return; // 直接返回，不再处理后续ID
+            }
+          }
+        }
+
+        comicId += batchSize;
+      } catch (e) {
+        final errorMessage = e.toString();
+        if (errorMessage.contains('操作已取消')) {
+          throw e;
+        }
+        
+        // 如果批量处理失败，回退到单个处理模式
+        print('批量同步失败，回退到单个处理: $e');
+        break;
+      }
+    }
+  }
 
   Future<void> syncAllManga({
     int startId = 1,
@@ -106,6 +180,13 @@ class MangaRepository {
     final result = await _client.query$ComicById(options);
 
     if (result.hasException) {
+      final errorMessage = result.exception.toString();
+      // 检查是否是"no rows in result set"错误，如果是则返回null而不是抛出异常
+      if (errorMessage.contains('sql: no rows in result set') ||
+          errorMessage.contains('Failed to retrieve comic by ID')) {
+        return null; // 返回null表示未找到
+      }
+      // 其他错误仍然抛出异常
       throw Exception('GraphQL error: ${result.exception}');
     }
 

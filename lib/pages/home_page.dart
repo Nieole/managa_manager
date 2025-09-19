@@ -262,7 +262,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      await _mangaRepo.syncAllManga(
+      await _mangaRepo.syncAllMangaParallel(
         onMangaAdded: (manga) {
           if (!_isAnalyzing) return;
           if (mounted) setState(() {});

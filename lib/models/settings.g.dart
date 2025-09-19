@@ -27,18 +27,23 @@ const SettingsSchema = CollectionSchema(
       name: r'expire',
       type: IsarType.string,
     ),
-    r'password': PropertySchema(
+    r'maxThreads': PropertySchema(
       id: 2,
+      name: r'maxThreads',
+      type: IsarType.long,
+    ),
+    r'password': PropertySchema(
+      id: 3,
       name: r'password',
       type: IsarType.string,
     ),
     r'savePath': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'savePath',
       type: IsarType.string,
     ),
     r'token': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'token',
       type: IsarType.string,
     )
@@ -79,9 +84,10 @@ void _settingsSerialize(
 ) {
   writer.writeString(offsets[0], object.email);
   writer.writeString(offsets[1], object.expire);
-  writer.writeString(offsets[2], object.password);
-  writer.writeString(offsets[3], object.savePath);
-  writer.writeString(offsets[4], object.token);
+  writer.writeLong(offsets[2], object.maxThreads);
+  writer.writeString(offsets[3], object.password);
+  writer.writeString(offsets[4], object.savePath);
+  writer.writeString(offsets[5], object.token);
 }
 
 Settings _settingsDeserialize(
@@ -94,9 +100,10 @@ Settings _settingsDeserialize(
   object.email = reader.readString(offsets[0]);
   object.expire = reader.readString(offsets[1]);
   object.id = id;
-  object.password = reader.readString(offsets[2]);
-  object.savePath = reader.readString(offsets[3]);
-  object.token = reader.readString(offsets[4]);
+  object.maxThreads = reader.readLong(offsets[2]);
+  object.password = reader.readString(offsets[3]);
+  object.savePath = reader.readString(offsets[4]);
+  object.token = reader.readString(offsets[5]);
   return object;
 }
 
@@ -112,10 +119,12 @@ P _settingsDeserializeProp<P>(
     case 1:
       return (reader.readString(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -515,6 +524,59 @@ extension SettingsQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterFilterCondition> maxThreadsEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'maxThreads',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterFilterCondition> maxThreadsGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'maxThreads',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterFilterCondition> maxThreadsLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'maxThreads',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterFilterCondition> maxThreadsBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'maxThreads',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -945,6 +1007,18 @@ extension SettingsQuerySortBy on QueryBuilder<Settings, Settings, QSortBy> {
     });
   }
 
+  QueryBuilder<Settings, Settings, QAfterSortBy> sortByMaxThreads() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'maxThreads', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterSortBy> sortByMaxThreadsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'maxThreads', Sort.desc);
+    });
+  }
+
   QueryBuilder<Settings, Settings, QAfterSortBy> sortByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1020,6 +1094,18 @@ extension SettingsQuerySortThenBy
     });
   }
 
+  QueryBuilder<Settings, Settings, QAfterSortBy> thenByMaxThreads() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'maxThreads', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Settings, Settings, QAfterSortBy> thenByMaxThreadsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'maxThreads', Sort.desc);
+    });
+  }
+
   QueryBuilder<Settings, Settings, QAfterSortBy> thenByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1073,6 +1159,12 @@ extension SettingsQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Settings, Settings, QDistinct> distinctByMaxThreads() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'maxThreads');
+    });
+  }
+
   QueryBuilder<Settings, Settings, QDistinct> distinctByPassword(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1112,6 +1204,12 @@ extension SettingsQueryProperty
   QueryBuilder<Settings, String, QQueryOperations> expireProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'expire');
+    });
+  }
+
+  QueryBuilder<Settings, int, QQueryOperations> maxThreadsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'maxThreads');
     });
   }
 

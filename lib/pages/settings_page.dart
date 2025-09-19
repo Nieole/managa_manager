@@ -27,6 +27,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _token = '';
   String _expire = '';
   bool _isLoggedIn = false;
+  int _maxThreads = 3;
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _password = settings.password;
           _token = settings.token;
           _expire = settings.expire;
+          _maxThreads = settings.maxThreads.clamp(1, 10);
           _isLoggedIn = settings.token.isNotEmpty && _isTokenValid();
         });
       }
@@ -192,6 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
       settings.password = _password;
       settings.token = _token;
       settings.expire = _expire;
+      settings.maxThreads = _maxThreads;
 
       await isar.writeTxn(() async {
         await isar.settings.put(settings);
@@ -365,6 +368,65 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ],
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 性能设置
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '性能设置',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.speed, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Text('最大线程数:'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Slider(
+                          value: _maxThreads.clamp(1, 10).toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          label: '$_maxThreads',
+                          onChanged: (value) {
+                            setState(() {
+                              _maxThreads = value.round().clamp(1, 10);
+                            });
+                          },
+                        ),
+                      ),
+                      Text(
+                        '$_maxThreads',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '设置同时进行的下载和同步任务数量。更多线程可以提高速度，但会消耗更多资源。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
                 ],
               ),
             ),
