@@ -53,6 +53,10 @@ class DownloadService {
       final f = File(saveFile);
       if (await f.exists()) {
         chapter.downloadedPages += 1;
+        // 报告进度
+        if (onProgress != null) {
+          onProgress(chapter.downloadedPages / chapter.totalPages);
+        }
         continue;
       }
       try {
