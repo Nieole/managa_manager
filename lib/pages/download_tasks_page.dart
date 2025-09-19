@@ -5,9 +5,11 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import '../models/chapter.dart';
 import '../models/manga.dart';
+import '../models/download_task.dart';
 import '../services/isar_service.dart';
 import '../repositories/settings_repository.dart';
 import '../services/download_service.dart';
+import '../services/download_task_service.dart';
 
 class DownloadTasksPage extends StatefulWidget {
   const DownloadTasksPage({super.key});
@@ -18,30 +20,27 @@ class DownloadTasksPage extends StatefulWidget {
 
 class _DownloadTasksPageState extends State<DownloadTasksPage> {
   late Future<Isar> _isarFuture;
-  final DownloadService _downloadService = DownloadService();
-  final Map<String, bool> _downloadingChapters = {};
-  final Map<String, bool> _pausedChapters = {};
+  final DownloadTaskService _downloadTaskService = DownloadTaskService();
   final Map<String, bool> _expandedManga = {};
-  final Map<String, double> _downloadProgress = {};
   final ScrollController _scrollController = ScrollController();
-  List<Manga> _mangaList = [];
+  Map<String, List<DownloadTask>> _groupedTasks = {};
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _isarFuture = IsarService.getInstance();
-    _loadMangaList();
+    _loadDownloadTasks();
   }
 
-  Future<void> _loadMangaList() async {
+  Future<void> _loadDownloadTasks() async {
     if (_isLoading) return;
     setState(() {
       _isLoading = true;
     });
     
     try {
-      _mangaList = await _getMangaWithIncompleteChapters();
+      _groupedTasks = await _downloadTaskService.getAllDownloadTasksGrouped();
     } finally {
       if (mounted) {
         setState(() {
@@ -57,140 +56,69 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
     super.dispose();
   }
 
-  Future<List<Manga>> _getMangaWithIncompleteChapters() async {
-    final isar = await _isarFuture;
-    final allMangas = await isar.mangas.where().findAll();
-    final mangaWithIncompleteChapters = <Manga>[];
-
-    for (final manga in allMangas) {
-      await manga.chapters.load();
-      final hasIncompleteChapters = manga.chapters.any((chapter) => 
-        !chapter.isDownloaded && chapter.totalPages > 0);
-      
-      if (hasIncompleteChapters) {
-        mangaWithIncompleteChapters.add(manga);
-      }
-    }
-
-    // 按mangaId正序排列
-    mangaWithIncompleteChapters.sort((a, b) => a.mangaId.compareTo(b.mangaId));
-    return mangaWithIncompleteChapters;
-  }
-
-  Future<void> _downloadChapter(Chapter chapter) async {
-    final savePath = await SettingsRepository().getSavePath();
-    if (savePath == null || savePath.isEmpty) {
-      EasyLoading.showInfo('请先设置保存路径');
-      return;
-    }
-
-    // 设置下载状态
-    _downloadingChapters[chapter.chapterId] = true;
-    _pausedChapters[chapter.chapterId] = false;
-    _downloadProgress[chapter.chapterId] = 0.0;
-    _updateChapterProgress(chapter.chapterId);
-
+  /// 执行下载任务
+  Future<void> _executeDownloadTask(DownloadTask task) async {
     try {
-      // 重新下载章节
-      chapter.downloadedPages = 0;
-      chapter.isDownloaded = false;
-      
-      await _downloadService.downloadChapter(
-        chapter, 
-        savePath,
-        onProgress: (progress) {
-          // 检查是否被暂停
-          if (_pausedChapters[chapter.chapterId] == true) {
-            return;
+      await _downloadTaskService.executeDownloadTask(
+        task,
+        onProgress: (updatedTask) {
+          // 实时更新UI中的任务进度
+          if (mounted) {
+            setState(() {
+              // 更新_groupedTasks中对应任务的进度
+              final mangaId = updatedTask.mangaId;
+              if (_groupedTasks.containsKey(mangaId)) {
+                final tasks = _groupedTasks[mangaId]!;
+                final index = tasks.indexWhere((t) => t.id == updatedTask.id);
+                if (index != -1) {
+                  tasks[index] = updatedTask;
+                }
+              }
+            });
           }
-          _downloadProgress[chapter.chapterId] = progress;
-          _updateChapterProgress(chapter.chapterId);
         },
       );
-      
-      // 检查是否被暂停
-      if (_pausedChapters[chapter.chapterId] == true) {
-        print('章节 ${chapter.chapterId} 下载被暂停');
-        return;
-      }
-      
-      // 验证下载是否成功
-      if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
-        chapter.isDownloaded = true;
-      }
-      
-      final isar = await _isarFuture;
-      await isar.writeTxn(() async {
-        await isar.chapters.put(chapter);
-      });
-      
-      // 下载完成后，如果章节已完成，从列表中移除
-      if (chapter.isDownloaded) {
-        _mangaList.removeWhere((manga) {
-          manga.chapters.removeWhere((c) => c.chapterId == chapter.chapterId);
-          return manga.chapters.isEmpty;
-        });
-      }
-      
-      _updateChapterProgress(chapter.chapterId);
+      // 重新加载任务列表（已完成的任务会自动被删除）
+      await _loadDownloadTasks();
     } catch (e) {
-      print('下载章节 ${chapter.chapterId} 失败: $e');
-    } finally {
-      _downloadingChapters[chapter.chapterId] = false;
-      _pausedChapters[chapter.chapterId] = false;
-      _downloadProgress.remove(chapter.chapterId);
-      _updateChapterProgress(chapter.chapterId);
+      EasyLoading.showError('下载失败: $e');
+      // 即使失败也要刷新列表以更新状态
+      await _loadDownloadTasks();
     }
   }
 
-  void _pauseChapter(Chapter chapter) {
-    setState(() {
-      _pausedChapters[chapter.chapterId] = true;
-    });
-    _updateChapterProgress(chapter.chapterId);
+  /// 暂停下载任务
+  Future<void> _pauseDownloadTask(DownloadTask task) async {
+    await _downloadTaskService.pauseDownloadTask(task);
+    await _loadDownloadTasks();
   }
 
-  void _resumeChapter(Chapter chapter) {
-    setState(() {
-      _pausedChapters[chapter.chapterId] = false;
-    });
-    _updateChapterProgress(chapter.chapterId);
+  /// 恢复下载任务
+  Future<void> _resumeDownloadTask(DownloadTask task) async {
+    await _downloadTaskService.resumeDownloadTask(task);
+    await _loadDownloadTasks();
   }
 
-  void _updateChapterProgress(String chapterId) {
-    // 只更新特定章节的进度，不触发整个页面重绘
-    if (mounted) {
-      setState(() {
-        // 这里只更新必要的状态
-      });
-    }
+  /// 删除下载任务
+  Future<void> _deleteDownloadTask(DownloadTask task) async {
+    await _downloadTaskService.deleteDownloadTask(task);
+    await _loadDownloadTasks();
   }
 
-  Future<void> _downloadAllFailedChapters(Manga manga) async {
-    final savePath = await SettingsRepository().getSavePath();
-    if (savePath == null || savePath.isEmpty) {
-      EasyLoading.showInfo('请先设置保存路径');
-      return;
-    }
-
-    await manga.chapters.load();
-    final failedChapters = manga.chapters.where((chapter) => 
-      !chapter.isDownloaded && chapter.totalPages > 0 && chapter.downloadedPages > 0).toList();
-
-    for (final chapter in failedChapters) {
-      if (_downloadingChapters[chapter.chapterId] == true) continue;
-      await _downloadChapter(chapter);
-    }
+  /// 删除已完成的任务
+  Future<void> _deleteCompletedTasks() async {
+    await _downloadTaskService.deleteCompletedTasks();
+    await _loadDownloadTasks();
+    EasyLoading.showSuccess('已删除所有已完成的任务');
   }
 
-  Widget _buildChapterItem(Chapter chapter) {
-    final isDownloading = _downloadingChapters[chapter.chapterId] == true;
-    final isPaused = _pausedChapters[chapter.chapterId] == true;
-    final progress = _downloadProgress[chapter.chapterId] ?? 
-        (chapter.totalPages > 0 ? chapter.downloadedPages / chapter.totalPages : 0.0);
-    final isCompleted = chapter.isDownloaded;
-    // 修复状态判断逻辑：只有在下载失败且不在下载中时才显示为失败状态
-    final isFailed = !isCompleted && !isDownloading && chapter.totalPages > 0 && chapter.downloadedPages > 0;
+
+  Widget _buildChapterItem(DownloadTask task) {
+    final isDownloading = task.status == 'downloading';
+    final isPaused = task.status == 'paused';
+    final progress = task.progress;
+    final isCompleted = task.status == 'completed';
+    final isFailed = task.status == 'failed';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -221,7 +149,7 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                       : const Icon(Icons.download, color: Colors.white),
         ),
         title: Text(
-          chapter.title.isEmpty ? chapter.chapterId : chapter.title,
+          task.chapterTitle,
           style: TextStyle(
             decoration: isCompleted ? TextDecoration.lineThrough : null,
             color: isCompleted ? Colors.grey : null,
@@ -241,23 +169,35 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
             const SizedBox(height: 4),
             Text(
               isCompleted 
-                  ? '已完成 (${chapter.downloadedPages}/${chapter.totalPages})'
+                  ? '已完成 (${task.downloadedPages}/${task.totalPages})'
                   : isFailed
-                      ? '下载失败 (${chapter.downloadedPages}/${chapter.totalPages})'
+                      ? '下载失败 (${task.downloadedPages}/${task.totalPages})'
                       : isDownloading
                           ? (isPaused 
-                              ? '已暂停 (${chapter.downloadedPages}/${chapter.totalPages})'
-                              : '下载中... (${chapter.downloadedPages}/${chapter.totalPages})')
-                          : '未开始 (0/${chapter.totalPages})',
+                              ? '已暂停 (${task.downloadedPages}/${task.totalPages})'
+                              : '下载中... (${task.downloadedPages}/${task.totalPages})')
+                          : '未开始 (0/${task.totalPages})',
               style: TextStyle(
                 fontSize: 12,
                 color: isCompleted ? Colors.grey : Colors.black87,
               ),
             ),
+            if (isFailed && task.errorMessage != null)
+              Text(
+                '错误: ${task.errorMessage}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.red,
+                ),
+              ),
           ],
         ),
         trailing: isCompleted
-            ? null
+            ? IconButton(
+                icon: const Icon(Icons.delete, color: Colors.grey),
+                onPressed: () => _deleteDownloadTask(task),
+                tooltip: '删除任务',
+              )
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -270,9 +210,9 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                       ),
                       onPressed: () {
                         if (isPaused) {
-                          _resumeChapter(chapter);
+                          _resumeDownloadTask(task);
                         } else {
-                          _pauseChapter(chapter);
+                          _pauseDownloadTask(task);
                         }
                       },
                       tooltip: isPaused ? '继续下载' : '暂停下载',
@@ -284,26 +224,30 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                         isFailed ? Icons.refresh : Icons.play_arrow,
                         color: isFailed ? Colors.red : Colors.blue,
                       ),
-                      onPressed: () => _downloadChapter(chapter),
+                      onPressed: () => _executeDownloadTask(task),
                       tooltip: isFailed ? '重试下载' : '开始下载',
                     ),
                   ],
+                  // 删除按钮
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.grey),
+                    onPressed: () => _deleteDownloadTask(task),
+                    tooltip: '删除任务',
+                  ),
                 ],
               ),
       ),
     );
   }
 
-  Widget _buildMangaSection(Manga manga) {
-    final isExpanded = _expandedManga[manga.mangaId] ?? false;
+  Widget _buildMangaSection(String mangaId, List<DownloadTask> tasks) {
+    final isExpanded = _expandedManga[mangaId] ?? false;
     
-    // 直接使用已加载的章节数据，避免FutureBuilder导致的重绘
-    final incompleteChapters = manga.chapters.where((chapter) => 
-      !chapter.isDownloaded && chapter.totalPages > 0).toList();
-    final completedChapters = manga.chapters.where((chapter) => 
-      chapter.isDownloaded).toList();
-    final failedChapters = manga.chapters.where((chapter) => 
-      !chapter.isDownloaded && chapter.totalPages > 0 && chapter.downloadedPages > 0).toList();
+    final completedTasks = tasks.where((task) => task.status == 'completed').toList();
+    final failedTasks = tasks.where((task) => task.status == 'failed').toList();
+    final pendingTasks = tasks.where((task) => task.status == 'pending').toList();
+    final downloadingTasks = tasks.where((task) => task.status == 'downloading').toList();
+    final pausedTasks = tasks.where((task) => task.status == 'paused').toList();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -311,13 +255,13 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
         children: [
           ListTile(
             leading: CircleAvatar(
-              backgroundColor: failedChapters.isNotEmpty 
+              backgroundColor: failedTasks.isNotEmpty 
                   ? Colors.red 
-                  : incompleteChapters.isNotEmpty 
+                  : (pendingTasks.isNotEmpty || downloadingTasks.isNotEmpty || pausedTasks.isNotEmpty)
                       ? Colors.orange 
                       : Colors.green,
               child: Text(
-                '${completedChapters.length}',
+                '${completedTasks.length}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -325,22 +269,28 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
               ),
             ),
             title: Text(
-              manga.title.isEmpty ? manga.mangaId : manga.title,
+              tasks.isNotEmpty ? tasks.first.mangaTitle : mangaId,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '已完成: ${completedChapters.length}/${manga.chapters.length} | '
-              '失败: ${failedChapters.length} | '
-              '待下载: ${incompleteChapters.length - failedChapters.length}',
+              '已完成: ${completedTasks.length}/${tasks.length} | '
+              '失败: ${failedTasks.length} | '
+              '下载中: ${downloadingTasks.length} | '
+              '暂停: ${pausedTasks.length} | '
+              '待开始: ${pendingTasks.length}',
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (failedChapters.isNotEmpty)
+                if (failedTasks.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.refresh, color: Colors.red),
-                    onPressed: () => _downloadAllFailedChapters(manga),
-                    tooltip: '重试所有失败章节',
+                    onPressed: () async {
+                      for (final task in failedTasks) {
+                        await _executeDownloadTask(task);
+                      }
+                    },
+                    tooltip: '重试所有失败任务',
                   ),
                 IconButton(
                   icon: Icon(
@@ -348,7 +298,7 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                   ),
                   onPressed: () {
                     setState(() {
-                      _expandedManga[manga.mangaId] = !isExpanded;
+                      _expandedManga[mangaId] = !isExpanded;
                     });
                   },
                 ),
@@ -357,7 +307,7 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
           ),
           if (isExpanded)
             Column(
-              children: incompleteChapters.map((chapter) => _buildChapterItem(chapter)).toList(),
+              children: tasks.map((task) => _buildChapterItem(task)).toList(),
             ),
         ],
       ),
@@ -371,38 +321,45 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
         title: const Text('下载任务'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: _deleteCompletedTasks,
+            tooltip: '删除已完成的任务',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadMangaList,
+            onPressed: _loadDownloadTasks,
             tooltip: '刷新任务列表',
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _mangaList.isEmpty
+          : _groupedTasks.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle, size: 64, color: Colors.green),
+                      Icon(Icons.download_done, size: 64, color: Colors.grey),
                       SizedBox(height: 16),
                       Text(
-                        '所有下载任务已完成！',
+                        '暂无下载任务',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 8),
                       Text(
-                        '没有待下载的章节',
-                        style: TextStyle(color: Colors.grey),
+                        '请先在漫画详情页提交下载任务',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
                   controller: _scrollController,
-                  itemCount: _mangaList.length,
+                  itemCount: _groupedTasks.length,
                   itemBuilder: (context, index) {
-                    return _buildMangaSection(_mangaList[index]);
+                    final mangaId = _groupedTasks.keys.elementAt(index);
+                    final tasks = _groupedTasks[mangaId]!;
+                    return _buildMangaSection(mangaId, tasks);
                   },
                 ),
     );

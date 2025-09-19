@@ -8,6 +8,7 @@ import '../models/manga.dart';
 import '../repositories/settings_repository.dart';
 import '../repositories/manga_repository.dart';
 import '../services/download_service.dart';
+import '../services/download_task_service.dart';
 import '../services/isar_service.dart';
 import '../services/path_service.dart';
 import 'manga_detail_page.dart';
@@ -27,6 +28,7 @@ class _HomePageState extends State<HomePage> {
   final SettingsRepository _settingsRepo = SettingsRepository();
   late MangaRepository _mangaRepo;
   final DownloadService _downloadService = DownloadService();
+  final DownloadTaskService _downloadTaskService = DownloadTaskService();
 
   int _page = 0;
   static const int _pageSize = 20;
@@ -344,6 +346,7 @@ class _HomePageState extends State<HomePage> {
     try {
       final isar = await _isarFuture;
       final allMangas = await isar.mangas.where().sortByMangaId().findAll();
+      int totalTasksAdded = 0;
       
       for (final manga in allMangas) {
         if (!_isAutoDownloading) break; // 检查是否被取消
@@ -356,30 +359,11 @@ class _HomePageState extends State<HomePage> {
         final totalChapters = manga.chapters.length;
         final downloadedChapters = manga.chapters.where((c) => c.isDownloaded).length;
         
-        // 如果有未下载的章节，则下载
+        // 如果有未下载的章节，则添加下载任务
         if (totalChapters > 0 && downloadedChapters < totalChapters) {
-          for (final chapter in manga.chapters) {
-            if (!_isAutoDownloading) break; // 检查是否被取消
-            
-            if (!chapter.isDownloaded) {
-              try {
-                await _downloadService.downloadChapter(chapter, savePath);
-                
-                // 验证下载是否成功
-                if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
-                  chapter.isDownloaded = true;
-                }
-                
-                await isar.writeTxn(() async {
-                  await isar.chapters.put(chapter);
-                });
-                
-                if (mounted) setState(() {}); // 刷新UI
-              } catch (e) {
-                print('下载章节 ${chapter.chapterId} 失败: $e');
-              }
-            }
-          }
+          final incompleteChapters = manga.chapters.where((c) => !c.isDownloaded).toList();
+          await _downloadTaskService.addDownloadTasks(incompleteChapters);
+          totalTasksAdded += incompleteChapters.length;
         }
       }
       
@@ -388,7 +372,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _currentDownloadMangaId = null;
         });
-        EasyLoading.showSuccess('自动下载完成');
+        EasyLoading.showSuccess('已提交 $totalTasksAdded 个自动下载任务');
       }
     } catch (e) {
       if (mounted) {

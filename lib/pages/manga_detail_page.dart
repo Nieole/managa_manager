@@ -9,6 +9,7 @@ import '../services/isar_service.dart';
 import '../repositories/manga_repository.dart';
 import '../repositories/settings_repository.dart';
 import '../services/download_service.dart';
+import '../services/download_task_service.dart';
 
 class MangaDetailPage extends StatefulWidget {
   const MangaDetailPage({super.key, required this.mangaId});
@@ -21,6 +22,7 @@ class MangaDetailPage extends StatefulWidget {
 class _MangaDetailPageState extends State<MangaDetailPage> {
   late Future<Isar> _isarFuture;
   late MangaRepository _repo;
+  final DownloadTaskService _downloadTaskService = DownloadTaskService();
   bool _selectionMode = false;
   final Set<Id> _selectedChapterIds = {};
   final Map<String, bool> _downloadingChapters = {};
@@ -68,55 +70,70 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   Future<void> _downloadSelectedChapters() async {
     if (_selectedChapterIds.isEmpty) return;
     
-    final savePath = await SettingsRepository().getSavePath();
-    if (savePath == null || savePath.isEmpty) {
-      EasyLoading.showInfo('请先设置保存路径');
-      return;
-    }
-
-    final downloadService = DownloadService();
     final isar = await _isarFuture;
+    final selectedChapters = <Chapter>[];
     
     try {
+      // 获取选中的章节
       for (final chapterId in _selectedChapterIds) {
         final chapter = await isar.chapters.get(chapterId);
-        if (chapter == null) continue;
-        
-        _downloadingChapters[chapter.chapterId] = true;
-        if (mounted) setState(() {});
-        
-        try {
-          // 重新下载章节
-          chapter.downloadedPages = 0;
-          chapter.isDownloaded = false;
-          await downloadService.downloadChapter(chapter, savePath);
-          
-          // 验证下载是否成功
-          if (chapter.downloadedPages >= chapter.totalPages && chapter.totalPages > 0) {
-            chapter.isDownloaded = true;
-          }
-          
-          await isar.writeTxn(() async {
-            await isar.chapters.put(chapter);
-          });
-        } catch (e) {
-          print('下载章节 ${chapter.chapterId} 失败: $e');
-        } finally {
-          _downloadingChapters[chapter.chapterId] = false;
-          if (mounted) setState(() {});
+        if (chapter != null) {
+          selectedChapters.add(chapter);
         }
       }
       
-      // 下载完成后刷新UI，但不显示遮罩
-      if (mounted) {
-        setState(() {});
-        // 通知父页面刷新数据
-        Navigator.of(context).pop(true); // 返回true表示需要刷新
+      if (selectedChapters.isEmpty) {
+        EasyLoading.showInfo('没有找到选中的章节');
+        return;
+      }
+      
+      // 添加下载任务
+      await _downloadTaskService.addDownloadTasks(selectedChapters);
+      
+      // 询问用户是否立即开始下载
+      final shouldStartNow = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('下载任务已提交'),
+          content: Text('已提交 ${selectedChapters.length} 个下载任务。是否立即开始下载？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('稍后下载'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('立即下载'),
+            ),
+          ],
+        ),
+      );
+      
+      // 退出选择模式
+      _selectionMode = false;
+      _selectedChapterIds.clear();
+      if (mounted) setState(() {});
+      
+      if (shouldStartNow == true) {
+        // 立即开始下载选中的任务（不显示全屏遮罩）
+        try {
+          for (final chapter in selectedChapters) {
+            final tasks = await _downloadTaskService.getDownloadTasksByMangaId(chapter.manga.value?.mangaId ?? '');
+            final task = tasks.firstWhere(
+              (t) => t.chapterId == chapter.chapterId,
+              orElse: () => throw Exception('找不到对应的下载任务'),
+            );
+            await _downloadTaskService.executeDownloadTask(task);
+          }
+          EasyLoading.showSuccess('下载完成');
+        } catch (e) {
+          EasyLoading.showError('下载失败: $e');
+        }
+      } else {
+        EasyLoading.showSuccess('已提交 ${selectedChapters.length} 个下载任务');
       }
     } catch (e) {
-      if (mounted) {
-        EasyLoading.showError('下载失败: $e');
-      }
+      EasyLoading.showError('提交下载任务失败: $e');
     }
   }
 
@@ -149,7 +166,12 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       if (f.existsSync()) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: FittedBox(fit: BoxFit.contain, child: Image.file(f)),
+          child: Image.file(
+            f,
+            width: 120,
+            height: 160,
+            fit: BoxFit.cover, // 使用cover而不是contain，确保图片填满容器
+          ),
         );
       }
     }

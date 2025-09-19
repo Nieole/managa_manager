@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/settings.dart';
 import '../models/manga.dart';
 import '../models/chapter.dart';
+import '../models/download_task.dart';
 
 class IsarService {
   IsarService._();
@@ -16,6 +17,7 @@ class IsarService {
       SettingsSchema,
       MangaSchema,
       ChapterSchema,
+      DownloadTaskSchema,
     ], directory: dir.path);
     return _instance!;
   }
