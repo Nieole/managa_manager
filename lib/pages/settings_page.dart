@@ -28,6 +28,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _expire = '';
   bool _isLoggedIn = false;
   int _maxThreads = 3;
+  bool _isAutoLoggingIn = false;
+  String? _loginErrorMessage;
 
   @override
   void initState() {
@@ -51,6 +53,11 @@ class _SettingsPageState extends State<SettingsPage> {
           _maxThreads = settings.maxThreads.clamp(1, 10);
           _isLoggedIn = settings.token.isNotEmpty && _isTokenValid();
         });
+        
+        // 如果有保存的登录信息但token已失效，尝试自动登录
+        if (!_isLoggedIn && _email.isNotEmpty && _password.isNotEmpty) {
+          await _autoLogin();
+        }
       }
     } catch (e) {
       print('加载设置失败: $e');
@@ -112,6 +119,66 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // 自动登录
+  Future<void> _autoLogin() async {
+    if (_isAutoLoggingIn) return; // 防止重复自动登录
+    
+    setState(() {
+      _isAutoLoggingIn = true;
+      _loginErrorMessage = null;
+    });
+
+    try {
+      print('尝试自动登录...');
+      final response = await _dio.post(
+        'https://komiic.com/api/login',
+        data: {
+          'email': _email,
+          'password': _password,
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['code'] == 200) {
+          setState(() {
+            _token = data['token'] ?? '';
+            _expire = data['expire'] ?? '';
+            _isLoggedIn = true;
+            _loginErrorMessage = null;
+          });
+          
+          await _saveSettings();
+          print('自动登录成功');
+        } else {
+          setState(() {
+            _loginErrorMessage = '自动登录失败: ${data['message'] ?? '未知错误'}';
+          });
+          print('自动登录失败: ${data['message']}');
+        }
+      } else {
+        setState(() {
+          _loginErrorMessage = '自动登录失败: HTTP ${response.statusCode}';
+        });
+        print('自动登录失败: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _loginErrorMessage = '自动登录失败: $e';
+      });
+      print('自动登录异常: $e');
+    } finally {
+      setState(() {
+        _isAutoLoggingIn = false;
+      });
+    }
+  }
+
   Future<void> _selectSavePath() async {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
@@ -129,9 +196,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _login() async {
     if (_email.isEmpty || _password.isEmpty) {
-      EasyLoading.showError('请输入邮箱和密码');
+      setState(() {
+        _loginErrorMessage = '请输入邮箱和密码';
+      });
       return;
     }
+
+    setState(() {
+      _loginErrorMessage = null;
+    });
 
     try {
       EasyLoading.show(status: '登录中...');
@@ -156,17 +229,27 @@ class _SettingsPageState extends State<SettingsPage> {
             _token = data['token'] ?? '';
             _expire = data['expire'] ?? '';
             _isLoggedIn = true;
+            _loginErrorMessage = null;
           });
           
           await _saveSettings();
           EasyLoading.showSuccess('登录成功');
         } else {
+          setState(() {
+            _loginErrorMessage = '登录失败: ${data['message'] ?? '未知错误'}';
+          });
           EasyLoading.showError('登录失败: ${data['message'] ?? '未知错误'}');
         }
       } else {
+        setState(() {
+          _loginErrorMessage = '登录失败: HTTP ${response.statusCode}';
+        });
         EasyLoading.showError('登录失败: HTTP ${response.statusCode}');
       }
     } catch (e) {
+      setState(() {
+        _loginErrorMessage = '登录失败: $e';
+      });
       EasyLoading.showError('登录失败: $e');
     }
   }
@@ -176,6 +259,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _token = '';
       _expire = '';
       _isLoggedIn = false;
+      _loginErrorMessage = null;
     });
     await _saveSettings();
     EasyLoading.showSuccess('已退出登录');
@@ -339,6 +423,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.email),
                       ),
+                      controller: TextEditingController(text: _email),
                       onChanged: (value) {
                         setState(() {
                           _email = value;
@@ -352,6 +437,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.lock),
                       ),
+                      controller: TextEditingController(text: _password),
                       obscureText: true,
                       onChanged: (value) {
                         setState(() {
@@ -359,12 +445,78 @@ class _SettingsPageState extends State<SettingsPage> {
                         });
                       },
                     ),
+                    
+                    // 显示错误信息
+                    if (_loginErrorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _loginErrorMessage!,
+                                style: const TextStyle(color: Colors.red, fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    
+                    // 显示自动登录状态
+                    if (_isAutoLoggingIn) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '正在自动登录...',
+                              style: TextStyle(color: Colors.blue, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _login,
-                        child: const Text('登录'),
+                        onPressed: _isAutoLoggingIn ? null : _login,
+                        child: _isAutoLoggingIn 
+                            ? const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('登录中...'),
+                                ],
+                              )
+                            : const Text('登录'),
                       ),
                     ),
                   ],

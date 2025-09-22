@@ -24,6 +24,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _pageJumpController = TextEditingController();
   late Future<Isar> _isarFuture;
   final SettingsRepository _settingsRepo = SettingsRepository();
   late MangaRepository _mangaRepo;
@@ -31,7 +32,7 @@ class _HomePageState extends State<HomePage> {
   final DownloadTaskService _downloadTaskService = DownloadTaskService();
 
   int _page = 0;
-  static const int _pageSize = 20;
+  int _pageSize = 20;
   bool _selectionMode = false;
   final Set<Id> _selectedIds = {};
   bool _isAnalyzing = false;
@@ -61,6 +62,31 @@ class _HomePageState extends State<HomePage> {
     if (s.contains('ongoing') || s.contains('serialize') || s.contains('serial')) return '连载中';
     if (s.contains('pause') || s.contains('hiatus')) return '暂停';
     return status; // 默认原文
+  }
+
+  // 跳转到指定页
+  void _jumpToPage(int totalPages) {
+    final pageText = _pageJumpController.text.trim();
+    if (pageText.isEmpty) return;
+    
+    final pageNumber = int.tryParse(pageText);
+    if (pageNumber == null || pageNumber < 1 || pageNumber > totalPages) {
+      EasyLoading.showError('请输入有效的页码 (1-$totalPages)');
+      return;
+    }
+    
+    setState(() {
+      _page = pageNumber - 1; // 转换为0基索引
+    });
+    _pageJumpController.clear();
+  }
+
+  // 设置每页显示数量
+  void _setPageSize(int newPageSize) {
+    setState(() {
+      _pageSize = newPageSize;
+      _page = 0; // 重置到第一页
+    });
   }
 
   // 构建封面组件：优先本地加载，本地不存在则触发下载后再加载
@@ -310,6 +336,26 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _selectionMode = !_selectionMode;
         if (!_selectionMode) _selectedIds.clear();
+      });
+    }
+  }
+
+  // 全选当前页面的漫画
+  void _selectAllOnCurrentPage(List<Manga> items) {
+    if (mounted) {
+      setState(() {
+        for (final manga in items) {
+          _selectedIds.add(manga.id);
+        }
+      });
+    }
+  }
+
+  // 取消全选
+  void _deselectAll() {
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
       });
     }
   }
@@ -865,37 +911,193 @@ class _HomePageState extends State<HomePage> {
                                   },
                                 ),
                               ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('第 $currentPage 页'),
-                                  Row(
+                              // 分页控件 - 一行布局
+                              Card(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // 减少垂直内边距
+                                  child: Row(
                                     children: [
-                                      TextButton(
-                                        onPressed: _page > 0
-                                            ? () => setState(() => _page -= 1)
-                                            : null,
-                                        child: const Text('上一页'),
+                                    // 分页信息
+                                    Text(
+                                      '第 $currentPage 页 / 共 $totalPages 页 (共 $totalCount 条)',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF4A4A6A), // 深紫色文字
                                       ),
-                                      const SizedBox(width: 8),
-                                      TextButton(
-                                        onPressed: currentPage < totalPages
-                                            ? () => setState(() => _page += 1)
-                                            : null,
-                                        child: const Text('下一页'),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    
+                                    // 上一页按钮
+                                    TextButton(
+                                      onPressed: _page > 0
+                                          ? () => setState(() => _page -= 1)
+                                          : null,
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: const Color(0xFF4A4A6A),
                                       ),
+                                      child: const Text('上一页'),
+                                    ),
+                                    
+                                    // 下一页按钮
+                                    TextButton(
+                                      onPressed: currentPage < totalPages
+                                          ? () => setState(() => _page += 1)
+                                          : null,
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: const Color(0xFF4A4A6A),
+                                      ),
+                                      child: const Text('下一页'),
+                                    ),
+                                    
+                                    const SizedBox(width: 16),
+                                    
+                                    // 跳转页面
+                                    const Text(
+                                      '跳转页:', 
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF4A4A6A),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    SizedBox(
+                                      width: 60,
+                                      child: TextField(
+                                        controller: _pageJumpController,
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(
+                                          color: Color(0xFF4A4A6A),
+                                          fontSize: 12,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderSide: BorderSide(color: const Color(0xFFD0D0E0)),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderSide: BorderSide(color: const Color(0xFFD0D0E0)),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderSide: BorderSide(color: const Color(0xFF6A6A8A)),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          isDense: true,
+                                          fillColor: Colors.white, // 与卡片背景色一致
+                                          filled: true,
+                                        ),
+                                        onSubmitted: (_) => _jumpToPage(totalPages),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    ElevatedButton(
+                                      onPressed: () => _jumpToPage(totalPages),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.white, // 与卡片背景色一致
+                                        foregroundColor: const Color(0xFF4A4A6A),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        minimumSize: Size.zero,
+                                        elevation: 0,
+                                        side: BorderSide(color: const Color(0xFFD0D0E0)),
+                                      ),
+                                      child: const Text('跳转', style: TextStyle(fontSize: 12)),
+                                    ),
+                                    
+                                    const SizedBox(width: 16),
+                                    
+                                    // 每页数量选择
+                                    const Text(
+                                      '每页:', 
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF4A4A6A),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      height: 32, // 固定高度，与输入框和按钮保持一致
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white, // 与卡片背景色一致
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: const Color(0xFFD0D0E0)),
+                                      ),
+                                      child: DropdownButton<int>(
+                                        value: _pageSize,
+                                        items: const [
+                                          DropdownMenuItem(value: 10, child: Text('10')),
+                                          DropdownMenuItem(value: 20, child: Text('20')),
+                                          DropdownMenuItem(value: 50, child: Text('50')),
+                                          DropdownMenuItem(value: 100, child: Text('100')),
+                                        ],
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            _setPageSize(value);
+                                          }
+                                        },
+                                        underline: Container(),
+                                        isExpanded: false,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF4A4A6A),
+                                        ),
+                                        dropdownColor: Colors.white, // 下拉菜单背景色也保持一致
+                                        icon: const Icon(
+                                          Icons.arrow_drop_down,
+                                          color: Color(0xFF4A4A6A),
+                                          size: 16, // 减小图标大小
+                                        ),
+                                      ),
+                                    ),
                                     ],
-                                  )
-                                ],
+                                  ),
+                                ),
                               ),
                               if (_selectionMode)
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: _downloadSelected,
-                                    icon: const Icon(Icons.download),
-                                    label: Text('下载选中（${_selectedIds.length}）'),
-                                  ),
+                                Column(
+                                  children: [
+                                    // 全选/取消全选按钮
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: () => _selectAllOnCurrentPage(items),
+                                            icon: const Icon(Icons.select_all),
+                                            label: const Text('全选当前页'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.blue,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: _deselectAll,
+                                            icon: const Icon(Icons.clear_all),
+                                            label: const Text('取消全选'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.grey,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    // 下载选中按钮
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _downloadSelected,
+                                        icon: const Icon(Icons.download),
+                                        label: Text('下载选中（${_selectedIds.length}）'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                             ],
                           );
