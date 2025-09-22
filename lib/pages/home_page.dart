@@ -275,9 +275,11 @@ class _HomePageState extends State<HomePage> {
         },
         onProgress: (id) {
           if (!_isAnalyzing) return;
-          setState(() {
-            _currentSyncId = id;
-          });
+          if (mounted) {
+            setState(() {
+              _currentSyncId = id;
+            });
+          }
         },
         shouldCancel: () => !_isAnalyzing,
       );
@@ -304,24 +306,30 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _toggleSelection() {
-    setState(() {
-      _selectionMode = !_selectionMode;
-      if (!_selectionMode) _selectedIds.clear();
-    });
+    if (mounted) {
+      setState(() {
+        _selectionMode = !_selectionMode;
+        if (!_selectionMode) _selectedIds.clear();
+      });
+    }
   }
 
   void _toggleFavoritesFilter() {
-    setState(() {
-      _showFavoritesOnly = !_showFavoritesOnly;
-      _page = 0; // 重置到第一页
-    });
+    if (mounted) {
+      setState(() {
+        _showFavoritesOnly = !_showFavoritesOnly;
+        _page = 0; // 重置到第一页
+      });
+    }
   }
 
   void _toggleDownloadedFilter() {
-    setState(() {
-      _showDownloadedOnly = !_showDownloadedOnly;
-      _page = 0; // 重置到第一页
-    });
+    if (mounted) {
+      setState(() {
+        _showDownloadedOnly = !_showDownloadedOnly;
+        _page = 0; // 重置到第一页
+      });
+    }
   }
 
   Future<void> _startAutoDownload() async {

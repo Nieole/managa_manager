@@ -41,30 +41,36 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   }
 
   void _toggleSelection() {
-    setState(() {
-      _selectionMode = !_selectionMode;
-      if (!_selectionMode) _selectedChapterIds.clear();
-    });
+    if (mounted) {
+      setState(() {
+        _selectionMode = !_selectionMode;
+        if (!_selectionMode) _selectedChapterIds.clear();
+      });
+    }
   }
 
   void _selectAllChapters(List<Chapter> chapters) {
-    setState(() {
-      _selectedChapterIds.clear();
-      for (final chapter in chapters) {
-        _selectedChapterIds.add(chapter.id);
-      }
-    });
+    if (mounted) {
+      setState(() {
+        _selectedChapterIds.clear();
+        for (final chapter in chapters) {
+          _selectedChapterIds.add(chapter.id);
+        }
+      });
+    }
   }
 
   void _selectUndownloadedChapters(List<Chapter> chapters) {
-    setState(() {
-      _selectedChapterIds.clear();
-      for (final chapter in chapters) {
-        if (!chapter.isDownloaded && chapter.totalPages > 0) {
-          _selectedChapterIds.add(chapter.id);
+    if (mounted) {
+      setState(() {
+        _selectedChapterIds.clear();
+        for (final chapter in chapters) {
+          if (!chapter.isDownloaded && chapter.totalPages > 0) {
+            _selectedChapterIds.add(chapter.id);
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   Future<void> _downloadSelectedChapters() async {

@@ -35,6 +35,8 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
 
   Future<void> _loadDownloadTasks() async {
     if (_isLoading) return;
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
@@ -297,9 +299,11 @@ class _DownloadTasksPageState extends State<DownloadTasksPage> {
                     isExpanded ? Icons.expand_less : Icons.expand_more,
                   ),
                   onPressed: () {
-                    setState(() {
-                      _expandedManga[mangaId] = !isExpanded;
-                    });
+                    if (mounted) {
+                      setState(() {
+                        _expandedManga[mangaId] = !isExpanded;
+                      });
+                    }
                   },
                 ),
               ],

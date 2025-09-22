@@ -33,14 +33,14 @@ class MangaRepository {
   /// 多线程同步所有漫画
   Future<void> syncAllMangaParallel({
     int startId = 1,
-    int batchSize = 10, // 改为10，与连续未找到的阈值一致
+    int batchSize = 30, // 改为30，与连续未找到的阈值一致
     Function(Manga)? onMangaAdded,
     bool Function()? shouldCancel,
     void Function(int currentId)? onProgress,
   }) async {
     int comicId = startId;
     int consecutiveNotFoundCount = 0;
-    const int maxConsecutiveNotFound = 10;
+    const int maxConsecutiveNotFound = 30;
 
     while (true) {
       // 检查是否应该取消
@@ -110,7 +110,7 @@ class MangaRepository {
   }) async {
     int comicId = startId;
     int consecutiveNotFoundCount = 0;
-    const int maxConsecutiveNotFound = 10;
+    const int maxConsecutiveNotFound = 30;
 
     while (true) {
       // 检查是否应该取消
