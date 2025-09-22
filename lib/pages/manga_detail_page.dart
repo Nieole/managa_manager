@@ -7,8 +7,6 @@ import '../models/chapter.dart';
 import '../models/manga.dart';
 import '../services/isar_service.dart';
 import '../repositories/manga_repository.dart';
-import '../repositories/settings_repository.dart';
-import '../services/download_service.dart';
 import '../services/download_task_service.dart';
 
 class MangaDetailPage extends StatefulWidget {
@@ -25,7 +23,6 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   final DownloadTaskService _downloadTaskService = DownloadTaskService();
   bool _selectionMode = false;
   final Set<Id> _selectedChapterIds = {};
-  final Map<String, bool> _downloadingChapters = {};
   List<Chapter> _currentChapters = [];
 
   @override
@@ -162,32 +159,269 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
 
   Widget _cover(Manga m) {
     final box = Container(
-      width: 120,
-      height: 160,
+      width: 140,
+      height: 200,
       color: Colors.grey[300],
       child: const Icon(Icons.image, color: Colors.grey),
     );
     if (m.coverLocalPath.isNotEmpty) {
       final f = File(m.coverLocalPath);
       if (f.existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            f,
-            width: 120,
-            height: 160,
-            fit: BoxFit.cover, // 使用cover而不是contain，确保图片填满容器
-          ),
+        return Image.file(
+          f,
+          width: 140,
+          height: 200,
+          fit: BoxFit.cover,
         );
       }
     }
     if (m.imageUrl.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(m.imageUrl, width: 120, height: 160, fit: BoxFit.cover),
-      );
+      return Image.network(m.imageUrl, width: 140, height: 200, fit: BoxFit.cover);
     }
     return box;
+  }
+
+  Widget _buildMetaInfo(Manga manga) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 基本信息行
+          Row(
+            children: [
+              Expanded(child: _buildInlineMetaItem('状态', _statusToZh(manga.status))),
+              if (manga.year > 0) Expanded(child: _buildInlineMetaItem('年份', '${manga.year}')),
+            ],
+          ),
+          // 作者和标签行
+          if (manga.author.isNotEmpty || manga.categories.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (manga.author.isNotEmpty) ...[
+                  Expanded(
+                    flex: 2,
+                    child: _buildInlineMetaItem('作者', manga.author),
+                  ),
+                ],
+                if (manga.categories.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: Wrap(
+                      spacing: 3,
+                      runSpacing: 3,
+                      children: manga.categories.map((category) => 
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            category,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ).toList(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          // 统计信息行
+          if (manga.views != null && manga.views! > 0 || manga.dateUpdated != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (manga.views != null && manga.views! > 0) 
+                  Expanded(child: _buildInlineMetaItem('点阅', '${manga.views}')),
+                if (manga.dateUpdated != null) 
+                  Expanded(child: _buildInlineMetaItem('更新', manga.updatedAt != null
+                      ? '${manga.updatedAt!.toLocal().year}-${manga.updatedAt!.toLocal().month.toString().padLeft(2, '0')}-${manga.updatedAt!.toLocal().day.toString().padLeft(2, '0')}'
+                      : '')),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactMetaItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineMetaItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(Manga manga, List<Chapter> chapters) {
+    final totalChapters = chapters.length;
+    final downloadedChapters = chapters.where((c) => c.isDownloaded).length;
+    
+    return Column(
+      children: [
+        // 打开网页按钮
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _openMangaWebPage(manga.mangaId),
+            icon: const Icon(Icons.open_in_browser, size: 14),
+            label: const Text('跳转地址'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+              elevation: 1,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        // 统计信息 - 紧凑布局
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildStatItem(Icons.book, '${totalChapters}话'),
+              _buildStatItem(Icons.download_done, '${downloadedChapters}已下载'),
+              _buildStatItem(Icons.favorite_border, '${manga.favoriteCount}'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: Colors.grey[600]),
+        const SizedBox(width: 2),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 打开漫画网页
+  Future<void> _openMangaWebPage(String mangaId) async {
+    try {
+      final url = 'https://komiic.com/comic/$mangaId';
+      
+      if (Platform.isWindows) {
+        // Windows平台使用start命令
+        await Process.run('cmd', ['/c', 'start', url]);
+      } else if (Platform.isMacOS) {
+        // macOS平台使用open命令
+        await Process.run('open', [url]);
+      } else if (Platform.isLinux) {
+        // Linux平台使用xdg-open命令
+        await Process.run('xdg-open', [url]);
+      } else {
+        EasyLoading.showError('不支持的操作系统');
+      }
+    } catch (e) {
+      EasyLoading.showError('打开链接失败: $e');
+    }
   }
 
   @override
@@ -283,156 +517,252 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               if (manga == null) return const Center(child: Text('未找到漫画'));
               return CustomScrollView(
                 slivers: [
+                  // 头部信息区域
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Container(
+                      color: Colors.white,
+                      child: Column(
                         children: [
-                          _cover(manga),
-                          const SizedBox(width: 12),
-                          Expanded(
+                          // 标题区域
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Text(
                                   manga.title.isEmpty ? manga.mangaId : manga.title,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                const SizedBox(height: 6),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 6,
-                                  children: [
-                                    _meta('状态', _statusToZh(manga.status)),
-                                    if (manga.year > 0) _meta('年份', '${manga.year}'),
-                                    if (manga.author.isNotEmpty) _meta('作者', manga.author),
-                                    if (manga.dateUpdated != null)
-                                      _meta('更新', manga.updatedAt != null
-                                          ? '${manga.updatedAt!.toLocal().year}-${manga.updatedAt!.toLocal().month.toString().padLeft(2, '0')}-${manga.updatedAt!.toLocal().day.toString().padLeft(2, '0')}'
-                                          : ''),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                if (manga.description != null && manga.description!.isNotEmpty)
-                                  Text(
-                                    manga.description!,
-                                    maxLines: 4,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: Colors.grey[700]),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
                                   ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (manga.otherTitles.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    manga.otherTitles.first,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
+                          // 封面和元信息区域 - 左右布局
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 封面图片
+                                Container(
+                                  width: 130,
+                                  height: 170,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.12),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: _cover(manga),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // 元信息和按钮 - 右侧布局
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildMetaInfo(manga),
+                                      const SizedBox(height: 8),
+                                      _buildActionButtons(manga, chapters),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                         ],
                       ),
                     ),
                   ),
+                  // 简介区域
+                  if (manga.description != null && manga.description!.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '简介',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              manga.description!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                height: 1.4,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  // 分隔线
+                  const SliverToBoxAdapter(
+                    child: Divider(height: 1, color: Color(0xFFE0E0E0)),
+                  ),
+                  // 章节列表标题
+                  SliverToBoxAdapter(
+                    child: Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Row(
+                        children: [
+                          const Text(
+                            '话',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_selectionMode) ...[
+                            Text(
+                              '已选择 ${_selectedChapterIds.length} 个章节',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            ElevatedButton.icon(
+                              onPressed: _downloadSelectedChapters,
+                              icon: const Icon(Icons.download, size: 12),
+                              label: const Text('下载选中'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  // 章节网格 - 响应式布局
                   SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 8,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 2.2,
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 60, // 固定章节框最大宽度
+                        mainAxisSpacing: 6,
+                        crossAxisSpacing: 6,
+                        childAspectRatio: 0.9, // 固定宽高比
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           final c = chapters[index];
                           final downloaded = c.isDownloaded;
                           final selected = _selectedChapterIds.contains(c.id);
-                          final downloading = _downloadingChapters[c.chapterId] == true;
-                          final label = c.title.isNotEmpty ? c.title : c.chapterId;
                           
                           return InkWell(
                             borderRadius: BorderRadius.circular(8),
                             onTap: () {
                               if (_selectionMode) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedChapterIds.remove(c.id);
-                                  } else {
-                                    _selectedChapterIds.add(c.id);
-                                  }
-                                });
+                                if (mounted) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedChapterIds.remove(c.id);
+                                    } else {
+                                      _selectedChapterIds.add(c.id);
+                                    }
+                                  });
+                                }
                               }
                             },
                             child: Container(
                               decoration: BoxDecoration(
                                 color: selected 
-                                    ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
-                                    : (downloaded ? Colors.green.withOpacity(0.15) : Theme.of(context).colorScheme.surface),
+                                    ? Colors.blue.withOpacity(0.15)
+                                    : (downloaded ? Colors.green.withOpacity(0.1) : Colors.white),
                                 border: Border.all(
                                   color: selected 
-                                      ? Theme.of(context).colorScheme.primary
-                                      : (downloaded ? Colors.green : Colors.grey.shade300),
+                                      ? Colors.blue
+                                      : (downloaded ? Colors.green : Colors.grey[300]!),
                                   width: selected ? 2 : 1,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
                               ),
                               alignment: Alignment.center,
-                              child: Stack(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (_selectionMode && selected) 
-                                            const Icon(Icons.check_circle, size: 16, color: Colors.blue),
-                                          if (_selectionMode && selected) const SizedBox(width: 4),
-                                          if (!_selectionMode && downloaded) 
-                                            const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                                          if (!_selectionMode && downloaded) const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              label, 
-                                              maxLines: 1, 
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: selected ? Theme.of(context).colorScheme.primary : null,
-                                                fontWeight: selected ? FontWeight.bold : null,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${c.totalPages}页',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: selected 
-                                              ? Theme.of(context).colorScheme.primary.withOpacity(0.8)
-                                              : Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (downloading)
-                                    Positioned.fill(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.3),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: const Center(
-                                          child: SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                  // 章节号
+                                  Text(
+                                    c.chapterId,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: selected 
+                                          ? Colors.blue
+                                          : (downloaded ? Colors.green : Colors.black87),
                                     ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  // 页数
+                                  Text(
+                                    '${c.totalPages}p',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  // 状态图标
+                                  if (downloaded || selected) ...[
+                                    const SizedBox(height: 1),
+                                    Icon(
+                                      downloaded ? Icons.check_circle : Icons.check_circle_outline,
+                                      size: 12,
+                                      color: downloaded ? Colors.green : Colors.blue,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -451,22 +781,6 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
     );
   }
 
-  Widget _meta(String k, String v) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$k: ', style: TextStyle(color: Colors.grey[600])),
-          Text(v),
-        ],
-      ),
-    );
-  }
 }
 
 
