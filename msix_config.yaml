@@ -1,0 +1,9 @@
+msix_version: 1.0.0.0
+display_name: 漫画管理器
+publisher_display_name: ManagaManager
+identity_name: ManagaManager
+publisher: CN=ManagaManager
+description: 一个用于同步和管理在线漫画的应用程序
+capabilities: internetClient,privateNetworkClientServer,documentsLibrary,removableStorage,picturesLibrary
+architecture: x64
+startup_task: true
